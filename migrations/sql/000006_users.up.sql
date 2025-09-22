@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS public.users (
+    id UUID NOT NULL DEFAULT uuidv7(),
+    nama TEXT NOT NULL,
+    username TEXT NOT NULL,
+    password TEXT NOT NULL,
+    role UUID NOT NULL,
+    last_active TIMESTAMPTZ,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    locked_until TIMESTAMPTZ,
+    failed_attempts INTEGER,
+    last_failed_at TIMESTAMPTZ,
+    refresh TEXT,
+    deleted_by VARCHAR,
+    deleted_at TIMESTAMPTZ,
+    updated_note TEXT, 
+    updated_by VARCHAR,
+    updated_at TIMESTAMPTZ,
+    created_by VARCHAR,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    CONSTRAINT users_pkey PRIMARY KEY (id)
+);

@@ -1,0 +1,109 @@
+
+name: "e-klinik-track"
+services:
+  e-klinik-db:
+    image: postgres:18rc1
+    container_name: e-klinik-db 
+    environment:
+      POSTGRES_USER: ${PG_USERNAME}
+      POSTGRES_PASSWORD: ${PG_PASSWORD}
+      POSTGRES_DB:  ${PG_NAME}
+      TZ: Asia/Jakarta
+    ports:
+      - "5435:5432"
+    networks:
+      -  e-klinik
+    volumes:
+      - pgeklinik:/var/lib/postgresql/data
+      # - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    command: ["postgres", "-c", "listen_addresses=0.0.0.0"]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "destiny", "-d", "pvsave"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    tty: true
+  
+  rabbit_mq:
+    image: rabbitmq:4.0-rc-management
+    container_name: rabbit_eklinik
+    ports:
+      - 5672:5672   # for sender and consumer connections
+      - 15672:15672 # for serve RabbitMQ GUI
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}    # Custom username
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    volumes:
+      - rabbitmq_eklinik:/var/lib/rabbitmq
+    restart: always
+    networks:
+      - e-klinik
+
+  typesense:
+    image: typesense/typesense:28.0
+    container_name: e-klinik-search
+    restart: on-failure
+    environment:
+      TYPESENSE_DATA_DIR: /data
+      TYPESENSE_API_KEY: wOk5BzIhew1eaSJf
+      TYPESENSE_PEERING_PORT: 8109
+      TYPESENSE_ENABLE_CORS: true
+    networks:
+      -  e-klinik
+    volumes:
+      - typesense-eklinik:/data
+    ports:
+      - "8108:8108"
+    command: '--data-dir /data --api-key=wOk5BzIhew1eaSJf --enable-cors'
+        
+ 
+  imagor:
+    image: ghcr.io/cshum/imagor:latest
+    container_name: imagor-e-klinik
+    environment:
+      PORT: 8000
+      IMAGOR_UNSAFE: 1 # unsafe URL for testing
+
+      # FILE_LOADER_BASE_DIR: /mnt/data # enable file loader by specifying base dir
+
+      # FILE_STORAGE_BASE_DIR: /mnt/data # enable file storage by specifying base dir
+      # FILE_STORAGE_MKDIR_PERMISSION: 0755 # optional
+      # FILE_STORAGE_WRITE_PERMISSION: 0666 # optional
+      # FILE_STORAGE_EXPIRATION: 1m
+
+      # FILE_RESULT_STORAGE_BASE_DIR: /mnt/data/result # enable file result storage by specifying base dir
+      # FILE_RESULT_STORAGE_MKDIR_PERMISSION: 0755 # optional
+      # FILE_RESULT_STORAGE_WRITE_PERMISSION: 0666 # optional
+      # FILE_RESULT_STORAGE_EXPIRATION: 1m
+      
+    volumes:
+      - ./:/mnt/data
+    networks:
+      -  e-klinik
+    ports:
+      - "8000:8000"
+  
+  minio:
+    image: bitnami/minio:2025.4.22
+    container_name: e-klinik-minio
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    networks:
+      -  e-klinik
+    volumes:
+      - 'minio_data_3:/data1'
+    environment:
+      - MINIO_ROOT_USER=poltekes
+      - MINIO_ROOT_PASSWORD=destiny13
+      - MINIO_DEFAULT_BUCKETS=astro
+networks:
+  e-klinik:
+    driver: bridge  
+
+volumes:
+  typesense-eklinik:
+  pgeklinik:
+  imagor:
+  minio_data_3:
+  rabbitmq_eklinik:

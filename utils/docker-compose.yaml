@@ -1,0 +1,106 @@
+services:
+  pvsavedb:
+    image: postgres:18rc1
+    container_name: pvsavedb
+    environment:
+      POSTGRES_USER: ${PG_USERNAME}
+      POSTGRES_PASSWORD: ${PG_PASSWORD}
+      POSTGRES_DB: ${PG_NAME}
+      TZ: Asia/Jakarta
+    ports:
+      - "5433:5432"
+    networks:
+      - pvsave
+    volumes:
+      - pgsave:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:Z
+    command: ["postgres", "-c", "listen_addresses=0.0.0.0"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${PG_USERNAME} -d $${PG_NAME} || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  keydb:
+    image: eqalpha/keydb
+    container_name: keydbpv
+    command: keydb-server /opt/keydb/keydb.conf --server-threads 2
+    volumes:
+      - keydb-pvsave:/data
+      - ./keydb.conf:/opt/keydb/keydb.conf:Z
+    ports:
+      - 6380:6379
+    networks:
+      - pvsave
+    restart: unless-stopped 
+
+  rabbit_mq:
+    image: rabbitmq:4.0-rc-management
+    container_name: rabbit_mq_pvsave
+    ports:
+      - 5672:5672
+      - 15672:15672
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    volumes:
+      - rabbitmq_pvsave:/var/lib/rabbitmq:Z
+    restart: always
+    networks:
+      - pvsave
+
+  typesense:
+    image: typesense/typesense:28.0
+    restart: on-failure
+    environment:
+      TYPESENSE_DATA_DIR: /data
+      TYPESENSE_API_KEY: wOk5BzIhew1eaSJf
+      TYPESENSE_PEERING_PORT: 8109
+      TYPESENSE_ENABLE_CORS: true
+    volumes:
+      - typesense-server-data:/data
+    ports:
+      - "8108:8108"
+    command: '--data-dir /data --api-key=wOk5BzIhew1eaSJf --enable-cors'
+    networks:
+      - pvsave
+        
+  imagor:
+    image: ghcr.io/cshum/imagor:latest
+    container_name: imagor
+    environment:
+      PORT: 8000
+      IMAGOR_UNSAFE: 1
+    volumes:
+      - ./:/mnt/data:Z
+    networks:
+      - pvsave
+    ports:
+      - "8000:8000"
+
+  minio:
+    image: bitnami/minio:2025.4.22
+    container_name: minio
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    networks:
+      - pvsave
+    volumes:
+      - minio_data_1:/data1:Z
+    environment:
+      MINIO_ROOT_USER: pvsave
+      MINIO_ROOT_PASSWORD: destiny13
+      MINIO_DEFAULT_BUCKETS: astro
+
+networks:
+  pvsave:
+    driver: bridge  
+
+volumes:
+  typesense-server-data:
+  keydb-pvsave:
+  rabbitmq_pvsave:
+  pgsave:
+  imagor:
+  minio_data_1:
