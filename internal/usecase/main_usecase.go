@@ -37,6 +37,10 @@ type MainUsecase interface {
 	ListKehadiran(c context.Context, arg request.SearchKehadiran) (any, error)
 	UpdateKehadiran(c context.Context, arg pg.UpdateKehadiranPartialParams) (any, error)
 	DeleteKehadiran(c context.Context, arg pg.DeleteKehadiranParams) error
+	AddSkpKehadiran(c context.Context, arg pg.CreateKehadiranSkpParams) (any, error)
+	ListKehadiranSkp(c context.Context, arg request.SearchKehadiranSkp) (any, error)
+	UpdateKehadiranSkp(c context.Context, arg pg.UpdateKehadiranSkpParams) (any, error)
+	DeleteKehadiranSkp(c context.Context, arg pg.DeleteKehadiranSkpParams) error
 }
 
 type MainUsecaseImpl struct {
@@ -381,6 +385,73 @@ func (mu *MainUsecaseImpl) DeleteKehadiran(c context.Context, arg pg.DeleteKehad
 	err := mu.db.DeleteKehadiran(c, arg)
 	if err != nil {
 		return pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed delete kehadiran")
+	}
+	return nil
+}
+
+func (mu *MainUsecaseImpl) AddSkpKehadiran(c context.Context, arg pg.CreateKehadiranSkpParams) (any, error) {
+	res, err := mu.db.CreateKehadiranSkp(c, arg)
+	if err != nil {
+		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed create kehadiran skp")
+	}
+	return res, nil
+}
+
+func (mu *MainUsecaseImpl) ListKehadiranSkp(c context.Context, arg request.SearchKehadiranSkp) (any, error) {
+	if arg.Limit <= 0 {
+		arg.Limit = 10
+	}
+	if arg.Page <= 0 {
+		arg.Page = 1
+	}
+	arg.Offset = utils.GetOffset(arg.Page, arg.Limit)
+
+	var params pg.ListKehadiranSkpParams
+	err := copier.Copy(&params, &arg)
+	if err != nil {
+		return nil, err
+	}
+
+	if arg.KehadiranID != nil && *arg.KehadiranID != "" {
+		fid := uuid.FromStringOrNil(*arg.KehadiranID)
+		params.KehadiranID = &fid
+	}
+	if arg.SkpIntervensiID != nil && *arg.SkpIntervensiID != "" {
+		kid := uuid.FromStringOrNil(*arg.SkpIntervensiID)
+		params.SkpIntervensiID = &kid
+	}
+
+	res, err := mu.db.ListKehadiranSkp(c, params)
+	if err != nil {
+		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get kehadiran skp")
+	}
+	if len(res) == 0 {
+		return resp.WithPaginate([]string{}, nil), err
+	}
+	var cparams pg.CountKehadiranParams
+	err = copier.Copy(&cparams, &arg)
+	if err != nil {
+		return nil, err
+	}
+	count, err := mu.db.CountKehadiran(c, cparams)
+	if err != nil {
+		return nil, err
+	}
+	return resp.WithPaginate(res, resp.CalculatePagination(arg.Page, arg.Limit, count)), nil
+}
+
+func (mu *MainUsecaseImpl) UpdateKehadiranSkp(c context.Context, arg pg.UpdateKehadiranSkpParams) (any, error) {
+	res, err := mu.db.UpdateKehadiranSkp(c, arg)
+	if err != nil {
+		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed update kehadiran skp")
+	}
+	return res, nil
+}
+
+func (mu *MainUsecaseImpl) DeleteKehadiranSkp(c context.Context, arg pg.DeleteKehadiranSkpParams) error {
+	err := mu.db.DeleteKehadiranSkp(c, arg)
+	if err != nil {
+		return pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed delete kehadiran skp")
 	}
 	return nil
 }

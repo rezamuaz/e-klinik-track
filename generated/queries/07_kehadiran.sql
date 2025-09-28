@@ -1,10 +1,10 @@
 -- name: CreateKehadiran :one
 INSERT INTO kehadiran (
-  fasilitas_id, kontrak_id, ruangan_id, pembimbing_id,user_id,
+  fasilitas_id, kontrak_id, ruangan_id, pembimbing_id,user_id,mata_kuliah_id,
   jadwal_dinas, created_by
 ) VALUES (
   $1, $2, $3, $4,
-  $5,$6, $7
+  $5,$6, $7,$8
 )
 RETURNING *;
 

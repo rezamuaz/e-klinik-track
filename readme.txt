@@ -7,5 +7,4 @@ SELECT setval(pg_get_serial_sequence('lesson', 'lesson_id'), COALESCE((SELECT MA
 ssh -L 5432:localhost:5432 root@109.123.238.119
 ssh -L 6379:localhost:6379 root@109.123.238.119
 
-
-docker run --rm -v $(pwd):/src -w /src sqlc/sqlc generate
+podman run --rm -v $(pwd):/src -w /src sqlc/sqlc generate

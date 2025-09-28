@@ -42,7 +42,8 @@ type Kehadiran struct {
 	ID           uuid.UUID          `json:"id"`
 	FasilitasID  uuid.UUID          `json:"fasilitas_id"`
 	KontrakID    uuid.UUID          `json:"kontrak_id"`
-	RuanganID    string             `json:"ruangan_id"`
+	RuanganID    uuid.UUID          `json:"ruangan_id"`
+	MataKuliahID uuid.UUID          `json:"mata_kuliah_id"`
 	PembimbingID uuid.UUID          `json:"pembimbing_id"`
 	JadwalDinas  *string            `json:"jadwal_dinas"`
 	UserID       uuid.UUID          `json:"user_id"`

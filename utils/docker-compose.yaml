@@ -1,7 +1,7 @@
 services:
   pvsavedb:
-    image: postgres:18rc1
-    container_name: pvsavedb
+    image: postgres:18
+    container_name: e-klinik-db
     environment:
       POSTGRES_USER: ${PG_USERNAME}
       POSTGRES_PASSWORD: ${PG_PASSWORD}

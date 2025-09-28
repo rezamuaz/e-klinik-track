@@ -2,7 +2,7 @@ CREATE TABLE IF NOT EXISTS kehadiran (
 	id UUID PRIMARY KEY  DEFAULT uuidv7(),
 	fasilitas_id UUID NOT NULL,
 	kontrak_id UUID NOT NULL, 
-	ruangan_id TEXT NOT NULL,
+	ruangan_id UUID NOT NULL,
     mata_kuliah_id UUID NOT NULL,
     pembimbing_id UUID NOT NULL,
     jadwal_dinas VARCHAR,

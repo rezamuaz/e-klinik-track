@@ -20,7 +20,7 @@ func NewApiRouter(cfg *config.Config, h *Initialized, cb *casbin.Enforcer) *pkg.
 
 	// arangoC := pkg.NewArangoDatabase(cfg)
 	gin.SetMode(cfg.Server.RunMode)
-	r := gin.New()
+	r := gin.Default()
 	r.GET("/", func(c *gin.Context) {
 		c.String(200, "Hello, World!!!")
 	})

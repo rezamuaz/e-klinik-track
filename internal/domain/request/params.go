@@ -120,3 +120,14 @@ type SearchKehadiran struct {
 	Offset       int32   `form:"offset" json:"offset"`
 	Limit        int32   `form:"limit" json:"limit"`
 }
+type SearchKehadiranSkp struct {
+	Page            int32   `form:"page" json:"page"`
+	Status          *string `json:"status"`
+	KehadiranID     *string `json:"kehadiran_id"`
+	SkpIntervensiID *string `json:"skp_intervensi_id"`
+	IsActive        *bool   `form:"is_active" json:"is_active"`
+	OrderBy         *string `form:"order_by" json:"order_by"`
+	Sort            *string `form:"sort" json:"sort"`
+	Offset          int32   `form:"offset" json:"offset"`
+	Limit           int32   `form:"limit" json:"limit"`
+}

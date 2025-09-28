@@ -10,6 +10,6 @@ func Auth(group *gin.RouterGroup, h *handler.AuthHandlerImpl) {
 
 	group.POST("/register", h.Register)
 	group.POST("/login", h.Login)
-	group.GET("/refresh", h.Refresh)
+	group.POST("/refresh", h.Refresh)
 
 }

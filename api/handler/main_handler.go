@@ -488,3 +488,90 @@ func (h *MainHandlerImpl) DeleteKehadiran(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, resp.GenerateBaseResponse(id, true, 0))
 }
+
+func (h *MainHandlerImpl) CreateKehadiranSkp(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+
+	var p pg.CreateKehadiranSkpParams
+	err := c.ShouldBindJSON(&p)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed created kehadiran", pkg.WrapErrorf(err, pkg.ErrorCodeInvalidArgument, "invalid json"))
+		return
+	}
+	value, _ := c.Get("nama")
+	p.CreatedBy = utils.StringPtr(value.(string))
+
+	result, err := h.mainUsecase.AddSkpKehadiran(ctx, p)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed created kehadiran", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(result, true, resp.Success))
+
+}
+func (h *MainHandlerImpl) ListKehadiranSkp(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+
+	var req request.SearchKehadiranSkp
+
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(400, gin.H{"error": "Invalid query parameters"})
+		return
+	}
+
+	result, err := h.mainUsecase.ListKehadiranSkp(ctx, req)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed get kehadiran", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(result, true, 0))
+
+}
+
+func (h *MainHandlerImpl) UpdateKehadiranSkp(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+
+	var p pg.UpdateKehadiranSkpParams
+	p.ID = uuid.Must(uuid.FromString(c.Query("id")))
+	err := c.ShouldBindJSON(&p)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed update kehadiran", pkg.WrapErrorf(err, pkg.ErrorCodeInvalidArgument, "invalid json"))
+		return
+	}
+	value, _ := c.Get("nama")
+	p.UpdatedBy = utils.StringPtr(value.(string))
+
+	res, err := h.mainUsecase.UpdateKehadiranSkp(ctx, p)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed update kehadiran", err)
+		return
+	}
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(res, true, 0))
+}
+
+func (h *MainHandlerImpl) DeleteKehadiranSkp(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+	id := c.Query("id")
+	if id == "" {
+		resp.GenerateBaseResponseWithError(c, "delete kehadiran failed", pkg.NewErrorf(pkg.ErrorCodeInvalidArgument, "invalid id"))
+
+	}
+	p := pg.DeleteKehadiranSkpParams{
+		ID:        uuid.Must(uuid.FromString(id)),
+		DeletedBy: nil}
+	value, _ := c.Get("nama")
+	p.DeletedBy = utils.StringPtr(value.(string))
+
+	err := h.mainUsecase.DeleteKehadiranSkp(ctx, p)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "delete kehadiran failed", err)
+		return
+	}
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(id, true, 0))
+}

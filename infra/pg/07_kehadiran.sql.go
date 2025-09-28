@@ -46,21 +46,22 @@ func (q *Queries) CountKehadiran(ctx context.Context, arg CountKehadiranParams) 
 
 const createKehadiran = `-- name: CreateKehadiran :one
 INSERT INTO kehadiran (
-  fasilitas_id, kontrak_id, ruangan_id, pembimbing_id,user_id,
+  fasilitas_id, kontrak_id, ruangan_id, pembimbing_id,user_id,mata_kuliah_id,
   jadwal_dinas, created_by
 ) VALUES (
   $1, $2, $3, $4,
-  $5,$6, $7
+  $5,$6, $7,$8
 )
-RETURNING id, fasilitas_id, kontrak_id, ruangan_id, pembimbing_id, jadwal_dinas, user_id, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at
+RETURNING id, fasilitas_id, kontrak_id, ruangan_id, mata_kuliah_id, pembimbing_id, jadwal_dinas, user_id, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at
 `
 
 type CreateKehadiranParams struct {
 	FasilitasID  uuid.UUID `json:"fasilitas_id"`
 	KontrakID    uuid.UUID `json:"kontrak_id"`
-	RuanganID    string    `json:"ruangan_id"`
+	RuanganID    uuid.UUID `json:"ruangan_id"`
 	PembimbingID uuid.UUID `json:"pembimbing_id"`
 	UserID       uuid.UUID `json:"user_id"`
+	MataKuliahID uuid.UUID `json:"mata_kuliah_id"`
 	JadwalDinas  *string   `json:"jadwal_dinas"`
 	CreatedBy    *string   `json:"created_by"`
 }
@@ -72,6 +73,7 @@ func (q *Queries) CreateKehadiran(ctx context.Context, arg CreateKehadiranParams
 		arg.RuanganID,
 		arg.PembimbingID,
 		arg.UserID,
+		arg.MataKuliahID,
 		arg.JadwalDinas,
 		arg.CreatedBy,
 	)
@@ -81,6 +83,7 @@ func (q *Queries) CreateKehadiran(ctx context.Context, arg CreateKehadiranParams
 		&i.FasilitasID,
 		&i.KontrakID,
 		&i.RuanganID,
+		&i.MataKuliahID,
 		&i.PembimbingID,
 		&i.JadwalDinas,
 		&i.UserID,
@@ -113,7 +116,7 @@ func (q *Queries) DeleteKehadiran(ctx context.Context, arg DeleteKehadiranParams
 }
 
 const getKehadiran = `-- name: GetKehadiran :one
-SELECT id, fasilitas_id, kontrak_id, ruangan_id, pembimbing_id, jadwal_dinas, user_id, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at FROM kehadiran
+SELECT id, fasilitas_id, kontrak_id, ruangan_id, mata_kuliah_id, pembimbing_id, jadwal_dinas, user_id, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at FROM kehadiran
 WHERE id = $1 AND deleted_at IS NULL
 LIMIT 1
 `
@@ -126,6 +129,7 @@ func (q *Queries) GetKehadiran(ctx context.Context, id uuid.UUID) (Kehadiran, er
 		&i.FasilitasID,
 		&i.KontrakID,
 		&i.RuanganID,
+		&i.MataKuliahID,
 		&i.PembimbingID,
 		&i.JadwalDinas,
 		&i.UserID,
@@ -186,7 +190,7 @@ type ListKehadiranRow struct {
 	ID           uuid.UUID          `json:"id"`
 	FasilitasID  uuid.UUID          `json:"fasilitas_id"`
 	KontrakID    uuid.UUID          `json:"kontrak_id"`
-	RuanganID    string             `json:"ruangan_id"`
+	RuanganID    uuid.UUID          `json:"ruangan_id"`
 	PembimbingID uuid.UUID          `json:"pembimbing_id"`
 	JadwalDinas  *string            `json:"jadwal_dinas"`
 	IsActive     bool               `json:"is_active"`
@@ -248,14 +252,14 @@ SET
   updated_note  = COALESCE($9, updated_note),
   updated_at    = now()
 WHERE id = $1
-RETURNING id, fasilitas_id, kontrak_id, ruangan_id, pembimbing_id, jadwal_dinas, user_id, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at
+RETURNING id, fasilitas_id, kontrak_id, ruangan_id, mata_kuliah_id, pembimbing_id, jadwal_dinas, user_id, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at
 `
 
 type UpdateKehadiranPartialParams struct {
 	ID           uuid.UUID  `json:"id"`
 	FasilitasID  *uuid.UUID `json:"fasilitas_id"`
 	KontrakID    *uuid.UUID `json:"kontrak_id"`
-	RuanganID    *string    `json:"ruangan_id"`
+	RuanganID    *uuid.UUID `json:"ruangan_id"`
 	PembimbingID *uuid.UUID `json:"pembimbing_id"`
 	JadwalDinas  *string    `json:"jadwal_dinas"`
 	IsActive     *bool      `json:"is_active"`
@@ -281,6 +285,7 @@ func (q *Queries) UpdateKehadiranPartial(ctx context.Context, arg UpdateKehadira
 		&i.FasilitasID,
 		&i.KontrakID,
 		&i.RuanganID,
+		&i.MataKuliahID,
 		&i.PembimbingID,
 		&i.JadwalDinas,
 		&i.UserID,

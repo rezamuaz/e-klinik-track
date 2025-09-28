@@ -10,7 +10,7 @@ func Main(group *gin.RouterGroup, h *handler.MainHandlerImpl) {
 
 	group.POST("/fasilitas", h.CreateFasilitasKesehatan)
 	group.GET("/fasilitas", h.ListFaslitasKesehatan)
-	group.PUT("/fasilita", h.UpdateFasilitasKesehatan)
+	group.PUT("/fasilitas", h.UpdateFasilitasKesehatan)
 	group.DELETE("/fasilitas", h.DelFasilitasKesehatan)
 	group.POST("/mata_kuliah", h.CreateMatakuliah)
 	group.GET("/mata_kuliah", h.ListMataKuliah)
@@ -28,5 +28,9 @@ func Main(group *gin.RouterGroup, h *handler.MainHandlerImpl) {
 	group.GET("/kehadiran", h.ListKehadiran)
 	group.PUT("/kehadiran", h.UpdateKehadiran)
 	group.DELETE("/kehadiran", h.DeleteKehadiran)
+	group.POST("/kehadiran_skp", h.CreateKehadiranSkp)
+	group.GET("/kehadiran_skp", h.ListKehadiranSkp)
+	group.PUT("/kehadiran_skp", h.UpdateKehadiranSkp)
+	group.DELETE("/kehadiran_skp", h.DeleteKehadiranSkp)
 
 }
