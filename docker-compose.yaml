@@ -69,46 +69,46 @@ services:
       - e-klinik
     restart: unless-stopped
 
-  imagor:
-    image: ghcr.io/cshum/imagor:latest
-    container_name: imagor-e-klinik
-    environment:
-      PORT: 8000
-      IMAGOR_UNSAFE: 1 # unsafe URL for testing
+  # imagor:
+  #   image: ghcr.io/cshum/imagor:latest
+  #   container_name: imagor-e-klinik
+  #   environment:
+  #     PORT: 8000
+  #     IMAGOR_UNSAFE: 1 # unsafe URL for testing
 
-      # FILE_LOADER_BASE_DIR: /mnt/data # enable file loader by specifying base dir
+  #     # FILE_LOADER_BASE_DIR: /mnt/data # enable file loader by specifying base dir
 
-      # FILE_STORAGE_BASE_DIR: /mnt/data # enable file storage by specifying base dir
-      # FILE_STORAGE_MKDIR_PERMISSION: 0755 # optional
-      # FILE_STORAGE_WRITE_PERMISSION: 0666 # optional
-      # FILE_STORAGE_EXPIRATION: 1m
+  #     # FILE_STORAGE_BASE_DIR: /mnt/data # enable file storage by specifying base dir
+  #     # FILE_STORAGE_MKDIR_PERMISSION: 0755 # optional
+  #     # FILE_STORAGE_WRITE_PERMISSION: 0666 # optional
+  #     # FILE_STORAGE_EXPIRATION: 1m
 
-      # FILE_RESULT_STORAGE_BASE_DIR: /mnt/data/result # enable file result storage by specifying base dir
-      # FILE_RESULT_STORAGE_MKDIR_PERMISSION: 0755 # optional
-      # FILE_RESULT_STORAGE_WRITE_PERMISSION: 0666 # optional
-      # FILE_RESULT_STORAGE_EXPIRATION: 1m
+  #     # FILE_RESULT_STORAGE_BASE_DIR: /mnt/data/result # enable file result storage by specifying base dir
+  #     # FILE_RESULT_STORAGE_MKDIR_PERMISSION: 0755 # optional
+  #     # FILE_RESULT_STORAGE_WRITE_PERMISSION: 0666 # optional
+  #     # FILE_RESULT_STORAGE_EXPIRATION: 1m
       
-    volumes:
-      - ./:/mnt/data
-    networks:
-      -  e-klinik
-    ports:
-      - "8000:8000"
+  #   volumes:
+  #     - ./:/mnt/data
+  #   networks:
+  #     -  e-klinik
+  #   ports:
+  #     - "8000:8000"
   
-  minio:
-    image: bitnami/minio:2025.4.22
-    container_name: e-klinik-minio
-    ports:
-      - '9000:9000'
-      - '9001:9001'
-    networks:
-      -  e-klinik
-    volumes:
-      - 'minio_data_3:/data1'
-    environment:
-      - MINIO_ROOT_USER=poltekes
-      - MINIO_ROOT_PASSWORD=destiny13
-      - MINIO_DEFAULT_BUCKETS=astro
+  # minio:
+  #   image: bitnami/minio:2025.4.22
+  #   container_name: e-klinik-minio
+  #   ports:
+  #     - '9000:9000'
+  #     - '9001:9001'
+  #   networks:
+  #     -  e-klinik
+  #   volumes:
+  #     - 'minio_data_3:/data1'
+  #   environment:
+  #     - MINIO_ROOT_USER=poltekes
+  #     - MINIO_ROOT_PASSWORD=destiny13
+  #     - MINIO_DEFAULT_BUCKETS=astro
 networks:
   e-klinik:
     driver: bridge  
