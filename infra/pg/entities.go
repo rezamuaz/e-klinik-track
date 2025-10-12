@@ -15,7 +15,9 @@ type FasilitasKesehatan struct {
 	ID            uuid.UUID          `json:"id"`
 	Nama          string             `json:"nama"`
 	Propinsi      *string            `json:"propinsi"`
+	PropinsiID    *uuid.UUID         `json:"propinsi_id"`
 	Kab           *string            `json:"kab"`
+	KabID         *uuid.UUID         `json:"kab_id"`
 	Alamat        *string            `json:"alamat"`
 	Thumbnail     *string            `json:"thumbnail"`
 	Telepon       *string            `json:"telepon"`
@@ -36,6 +38,20 @@ type FasilitasKesehatan struct {
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 	CreatedBy     *string            `json:"created_by"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type Kabupaten struct {
+	ID          uuid.UUID          `json:"id"`
+	Nama        string             `json:"nama"`
+	PropinsiID  *uuid.UUID         `json:"propinsi_id"`
+	IsActive    bool               `json:"is_active"`
+	DeletedBy   *string            `json:"deleted_by"`
+	DeletedAt   pgtype.Timestamptz `json:"deleted_at"`
+	UpdatedNote *string            `json:"updated_note"`
+	UpdatedBy   *string            `json:"updated_by"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	CreatedBy   *string            `json:"created_by"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
 type Kehadiran struct {
@@ -75,7 +91,8 @@ type KehadiranSkp struct {
 type Kontrak struct {
 	ID             uuid.UUID          `json:"id"`
 	FasilitasID    uuid.UUID          `json:"fasilitas_id"`
-	Nama           string             `json:"nama"`
+	NoUtama        string             `json:"no_utama"`
+	NoRef          string             `json:"no_ref"`
 	PeriodeMulai   pgtype.Timestamptz `json:"periode_mulai"`
 	PeriodeSelesai pgtype.Timestamptz `json:"periode_selesai"`
 	Durasi         pgtype.Interval    `json:"durasi"`
@@ -103,25 +120,41 @@ type MataKuliah struct {
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
-type R1Permission struct {
-	ID        uuid.UUID          `json:"id"`
-	Label     string             `json:"label"`
-	Level     *int16             `json:"level"`
-	ParentID  *string            `json:"parent_id"`
-	Route     *string            `json:"route"`
-	Method    *string            `json:"method"`
-	Type      *string            `json:"type"`
-	IsActive  bool               `json:"is_active"`
-	DeletedBy *string            `json:"deleted_by"`
-	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
-	UpdatedBy *string            `json:"updated_by"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
-	CreatedBy *string            `json:"created_by"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
+type Propinsi struct {
+	ID          uuid.UUID          `json:"id"`
+	Nama        string             `json:"nama"`
+	IsActive    bool               `json:"is_active"`
+	DeletedBy   *string            `json:"deleted_by"`
+	DeletedAt   pgtype.Timestamptz `json:"deleted_at"`
+	UpdatedNote *string            `json:"updated_note"`
+	UpdatedBy   *string            `json:"updated_by"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	CreatedBy   *string            `json:"created_by"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
-type R2GroupPermission struct {
-	ID          uuid.UUID          `json:"id"`
+type R1View struct {
+	ID          int32              `json:"id"`
+	Label       string             `json:"label"`
+	Level       *int16             `json:"level"`
+	ParentID    *int32             `json:"parent_id"`
+	Path        *string            `json:"path"`
+	Method      *string            `json:"method"`
+	ResourceKey string             `json:"resource_key"`
+	Action      string             `json:"action"`
+	View        *string            `json:"view"`
+	Data        *string            `json:"data"`
+	IsActive    bool               `json:"is_active"`
+	DeletedBy   *string            `json:"deleted_by"`
+	DeletedAt   pgtype.Timestamptz `json:"deleted_at"`
+	UpdatedBy   *string            `json:"updated_by"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	CreatedBy   *string            `json:"created_by"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type R2Group struct {
+	ID          int32              `json:"id"`
 	Name        string             `json:"name"`
 	Description *string            `json:"description"`
 	IsActive    bool               `json:"is_active"`
@@ -133,22 +166,23 @@ type R2GroupPermission struct {
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
-type R3PermissionStatus struct {
-	ID           uuid.UUID          `json:"id"`
-	PermissionID uuid.UUID          `json:"permission_id"`
-	GroupID      uuid.UUID          `json:"group_id"`
-	Value        *bool              `json:"value"`
-	DeletedBy    *string            `json:"deleted_by"`
-	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
-	UpdatedBy    *string            `json:"updated_by"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
-	CreatedBy    *string            `json:"created_by"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+type R3ViewRole struct {
+	ID        uuid.UUID          `json:"id"`
+	ViewID    int32              `json:"view_id"`
+	RoleID    int32              `json:"role_id"`
+	Action    *string            `json:"action"`
+	DeletedBy *string            `json:"deleted_by"`
+	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
+	UpdatedBy *string            `json:"updated_by"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	CreatedBy *string            `json:"created_by"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
-type R4UserRole struct {
-	ID        uuid.UUID          `json:"id"`
+type R4Role struct {
+	ID        int32              `json:"id"`
 	Tag       string             `json:"tag"`
+	Nama      string             `json:"nama"`
 	IsActive  bool               `json:"is_active"`
 	DeletedBy *string            `json:"deleted_by"`
 	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
@@ -158,17 +192,44 @@ type R4UserRole struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
-type R5PermissionRole struct {
-	ID           uuid.UUID          `json:"id"`
-	PermissionID uuid.UUID          `json:"permission_id"`
-	UserRolesID  uuid.UUID          `json:"user_roles_id"`
-	IsActive     bool               `json:"is_active"`
-	DeletedBy    *string            `json:"deleted_by"`
-	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
-	UpdatedBy    *string            `json:"updated_by"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
-	CreatedBy    *string            `json:"created_by"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+type R5UserRole struct {
+	ID        uuid.UUID          `json:"id"`
+	UserID    uuid.UUID          `json:"user_id"`
+	RoleID    int32              `json:"role_id"`
+	IsActive  bool               `json:"is_active"`
+	DeletedBy *string            `json:"deleted_by"`
+	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
+	UpdatedBy *string            `json:"updated_by"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	CreatedBy *string            `json:"created_by"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type R6UserGroup struct {
+	ID        uuid.UUID          `json:"id"`
+	UserID    uuid.UUID          `json:"user_id"`
+	GrupID    int32              `json:"grup_id"`
+	Tipe      *string            `json:"tipe"`
+	IsActive  bool               `json:"is_active"`
+	DeletedBy *string            `json:"deleted_by"`
+	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
+	UpdatedBy *string            `json:"updated_by"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	CreatedBy *string            `json:"created_by"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type R7GroupRole struct {
+	ID        uuid.UUID          `json:"id"`
+	GroupID   int32              `json:"group_id"`
+	RoleID    int32              `json:"role_id"`
+	IsActive  bool               `json:"is_active"`
+	DeletedBy *string            `json:"deleted_by"`
+	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
+	UpdatedBy *string            `json:"updated_by"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	CreatedBy *string            `json:"created_by"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
 type Ruangan struct {
@@ -209,7 +270,6 @@ type User struct {
 	Nama           string             `json:"nama"`
 	Username       string             `json:"username"`
 	Password       string             `json:"password"`
-	Role           uuid.UUID          `json:"role"`
 	LastActive     pgtype.Timestamptz `json:"last_active"`
 	IsActive       bool               `json:"is_active"`
 	LockedUntil    pgtype.Timestamptz `json:"locked_until"`
@@ -223,20 +283,6 @@ type User struct {
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 	CreatedBy      *string            `json:"created_by"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-}
-
-type UserGroup struct {
-	ID        uuid.UUID          `json:"id"`
-	UserID    uuid.UUID          `json:"user_id"`
-	GrupID    *string            `json:"grup_id"`
-	Tipe      *string            `json:"tipe"`
-	IsActive  bool               `json:"is_active"`
-	DeletedBy *string            `json:"deleted_by"`
-	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
-	UpdatedBy *string            `json:"updated_by"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
-	CreatedBy *string            `json:"created_by"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
 type UserLog struct {

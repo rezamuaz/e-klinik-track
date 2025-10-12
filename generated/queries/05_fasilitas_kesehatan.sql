@@ -40,6 +40,7 @@ FROM fasilitas_kesehatan
 WHERE deleted_at IS NULL
   AND (sqlc.narg('nama')::text IS NULL OR nama ILIKE '%' || sqlc.narg('nama') || '%')
   AND (sqlc.narg('propinsi')::text IS NULL OR propinsi ILIKE '%' || sqlc.narg('propinsi') || '%')
+  AND (sqlc.narg('kab_id')::uuid IS NULL OR kab_id = sqlc.narg('kab_id')::uuid)
   AND (sqlc.narg('kab')::text IS NULL OR kab ILIKE '%' || sqlc.narg('kab') || '%')
   AND (sqlc.narg('is_active')::boolean IS NULL OR is_active = sqlc.narg('is_active')::boolean)
   AND (sqlc.narg('tipe')::text IS NULL OR tipe = sqlc.narg('tipe')::text)
@@ -58,8 +59,24 @@ WHERE deleted_at IS NULL
   AND (sqlc.narg('nama')::text IS NULL OR nama ILIKE '%' || sqlc.narg('nama') || '%')
   AND (sqlc.narg('propinsi')::text IS NULL OR propinsi ILIKE '%' || sqlc.narg('propinsi') || '%')
   AND (sqlc.narg('kab')::text IS NULL OR kab ILIKE '%' || sqlc.narg('kab') || '%')
+  AND (sqlc.narg('kab_id')::uuid IS NULL OR kab_id = sqlc.narg('kab_id')::uuid)
   AND (sqlc.narg('is_active')::boolean IS NULL OR is_active = sqlc.narg('is_active')::boolean)
   AND (sqlc.narg('tipe')::text IS NULL OR tipe = sqlc.narg('tipe')::text);
+
+-- name: ListDistinctKabupaten :many
+SELECT id,nama
+FROM kabupaten
+WHERE (sqlc.narg('nama')::text IS NULL OR nama ILIKE '%' || sqlc.narg('nama')::text || '%')
+  AND (sqlc.narg('propinsi_id')::uuid IS NULL OR propinsi_id = sqlc.narg('propinsi_id')::uuid)
+ORDER BY nama ASC
+LIMIT $1 OFFSET $2;
+
+-- name: ListDistinctPropinsi :many
+SELECT id,nama
+FROM propinsi
+WHERE (sqlc.narg('propinsi')::text IS NULL OR nama ILIKE '%' || sqlc.narg('propinsi')::text || '%')
+ORDER BY nama ASC
+LIMIT $1 OFFSET $2;
 
 
 -- name: UpdateFasilitasKesehatanPartial :one

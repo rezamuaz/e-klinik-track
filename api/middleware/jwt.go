@@ -27,7 +27,8 @@ func JwtAuth(secret string) gin.HandlerFunc {
 					c.AbortWithStatusJSON(http.StatusUnauthorized, resp.GenerateBaseResponseWithAnyError(nil, false, resp.InternalError, err.Error()))
 					return
 				}
-				c.Set("username", user.ID)
+				c.Set("username", user.Username)
+				c.Set("Id", user.ID)
 				c.Set("nama", user.Nama)
 				c.Next()
 				return

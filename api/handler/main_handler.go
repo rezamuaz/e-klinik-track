@@ -39,6 +39,8 @@ type MainHandler interface {
 	ListKehadiran(c *gin.Context)
 	UpdateKehadiran(c *gin.Context)
 	DeleteKehadiran(c *gin.Context)
+	ListPropinsi(c *gin.Context)
+	ListKabupaten(c *gin.Context)
 }
 
 type MainHandlerImpl struct {
@@ -270,6 +272,26 @@ func (h *MainHandlerImpl) ListKontrak(c *gin.Context) {
 	c.JSON(http.StatusOK, resp.GenerateBaseResponse(result, true, 0))
 
 }
+func (h *MainHandlerImpl) ListAktifKontrak(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+
+	var req request.SearchAktifKontrak
+
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(400, gin.H{"error": "Invalid query parameters"})
+		return
+	}
+
+	result, err := h.mainUsecase.ListAktifKontrak(ctx, req.FasilitasNama)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed get kontrak", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(result, true, 0))
+
+}
 
 func (h *MainHandlerImpl) UpdateKontrak(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c, 5*time.Second)
@@ -293,17 +315,34 @@ func (h *MainHandlerImpl) UpdateKontrak(c *gin.Context) {
 	c.JSON(http.StatusOK, resp.GenerateBaseResponse(res, true, 0))
 }
 
+func (h *MainHandlerImpl) KontrakDetail(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+	id := c.Param("id")
+	if id == "" {
+		resp.GenerateBaseResponseWithError(c, "detail kontrak failed", pkg.NewErrorf(pkg.ErrorCodeInvalidArgument, "invalid id"))
+
+	}
+	p := uuid.Must(uuid.FromString(id))
+
+	res, err := h.mainUsecase.KontrakById(ctx, p)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "detailkontrak failed", err)
+		return
+	}
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(res, true, 0))
+}
+
 func (h *MainHandlerImpl) DelKontrak(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c, 5*time.Second)
 	defer cancel()
-	id := c.Query("id")
+	id := c.Param("id")
 	if id == "" {
 		resp.GenerateBaseResponseWithError(c, "delete kontrak failed", pkg.NewErrorf(pkg.ErrorCodeInvalidArgument, "invalid id"))
-
 	}
+
 	p := pg.DeleteKontrakParams{
-		ID:        uuid.Must(uuid.FromString(id)),
-		DeletedBy: nil}
+		ID: uuid.Must(uuid.FromString(id))}
 	value, _ := c.Get("nama")
 	p.DeletedBy = utils.StringPtr(value.(string))
 
@@ -337,6 +376,23 @@ func (h *MainHandlerImpl) CreateRuangan(c *gin.Context) {
 	c.JSON(http.StatusOK, resp.GenerateBaseResponse(result, true, resp.Success))
 
 }
+func (h *MainHandlerImpl) RuanganDetail(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+	id := c.Param("id")
+	if id == "" {
+		resp.GenerateBaseResponseWithError(c, "detail ruangan failed", pkg.NewErrorf(pkg.ErrorCodeInvalidArgument, "invalid id"))
+
+	}
+	p := uuid.Must(uuid.FromString(id))
+
+	res, err := h.mainUsecase.RuanganById(ctx, p)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "detailruanganfailed", err)
+		return
+	}
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(res, true, 0))
+}
 func (h *MainHandlerImpl) ListRuangan(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c, 5*time.Second)
 	defer cancel()
@@ -361,9 +417,9 @@ func (h *MainHandlerImpl) ListRuangan(c *gin.Context) {
 func (h *MainHandlerImpl) UpdateRuangan(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c, 5*time.Second)
 	defer cancel()
-
+	id := c.Param("id")
 	var p pg.UpdateRuanganPartialParams
-	p.ID = uuid.Must(uuid.FromString(c.Query("id")))
+	p.ID = uuid.Must(uuid.FromString(id))
 	err := c.ShouldBindJSON(&p)
 	if err != nil {
 		resp.GenerateBaseResponseWithError(c, "failed update ruangan", pkg.WrapErrorf(err, pkg.ErrorCodeInvalidArgument, "invalid json"))
@@ -574,4 +630,59 @@ func (h *MainHandlerImpl) DeleteKehadiranSkp(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, resp.GenerateBaseResponse(id, true, 0))
+}
+
+func (h *MainHandlerImpl) ListPropinsi(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+
+	var req request.SearchPropinsi
+
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(400, gin.H{"error": "Invalid query parameters"})
+		return
+	}
+
+	result, err := h.mainUsecase.ListPropinsi(ctx, req)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed get propinsi", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(result, true, 0))
+
+}
+func (h *MainHandlerImpl) ListKabupaten(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+
+	var req request.SearchKabupaten
+
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(400, gin.H{"error": "Invalid query parameters"})
+		return
+	}
+
+	result, err := h.mainUsecase.ListKabupaten(ctx, req)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed get kabupaten", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(result, true, 0))
+
+}
+
+func (h *MainHandlerImpl) ListIntervensi(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+
+	result, err := h.mainUsecase.ListIntervensi(ctx)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed get intervensi", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(result, true, 0))
+
 }

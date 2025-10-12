@@ -45,7 +45,7 @@ var handlerSet = wire.NewSet(
 )
 
 // InitServer is the injector entry po int.
-func Injector(cfg *config.Config, ch *amqp.Channel, pg *pkg.Postgres, cache *pkg.RistrettoCache, casbin *casbin.Enforcer) *pkg.Server {
+func Injector(cfg *config.Config, ch *amqp.Channel, pg *pkg.Postgres, cache *pkg.RedisCache, casbin *casbin.Enforcer) *pkg.Server {
 	wire.Build(
 		// repositorySet,
 		usecaseSet,

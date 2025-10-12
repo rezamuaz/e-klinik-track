@@ -51,7 +51,7 @@ type RedisConfig struct {
 	Host               string        `env:"REDIS_HOST"`
 	Port               string        `env:"REDIS_PORT"`
 	Password           string        `env:"REDIS_PASSWORD"`
-	Db                 string        `env:"REDIS_DB"`
+	Db                 int           `env:"REDIS_DB"`
 	DialTimeout        time.Duration `env:"REDIS_DIAL_TIMEOUT"`
 	ReadTimeout        time.Duration `env:"REDIS_READ_TIMEOUT"`
 	WriteTimeout       time.Duration `env:"REDIS_WRITE_TIMEOUT"`

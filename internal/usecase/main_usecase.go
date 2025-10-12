@@ -26,11 +26,14 @@ type MainUsecase interface {
 	UpdateMataKuliah(c context.Context, arg pg.UpdateMataKuliahParams) (any, error)
 	DeleteMataKuliah(c context.Context, arg pg.DeleteMataKuliahParams) error
 	AddKontrak(c context.Context, arg request.CreateKontrak) (any, error)
+	KontrakById(c context.Context, arg uuid.UUID) (any, error)
 	ListKontrak(c context.Context, arg request.SearchKontrak) (any, error)
+	ListAktifKontrak(c context.Context, arg *string) (any, error)
 	UpdateKontrak(c context.Context, arg pg.UpdateKontrakPartialParams) (any, error)
 	DeleteKontrak(c context.Context, arg pg.DeleteKontrakParams) error
 	AddRuangan(c context.Context, arg pg.CreateRuanganParams) (any, error)
 	ListRuangan(c context.Context, arg request.SearchRuangan) (any, error)
+	RuanganById(c context.Context, arg uuid.UUID) (any, error)
 	UpdateRuangan(c context.Context, arg pg.UpdateRuanganPartialParams) (any, error)
 	DeleteRuangan(c context.Context, arg pg.DeleteRuanganParams) error
 	AddKehadiran(c context.Context, arg pg.CreateKehadiranParams) (any, error)
@@ -41,6 +44,9 @@ type MainUsecase interface {
 	ListKehadiranSkp(c context.Context, arg request.SearchKehadiranSkp) (any, error)
 	UpdateKehadiranSkp(c context.Context, arg pg.UpdateKehadiranSkpParams) (any, error)
 	DeleteKehadiranSkp(c context.Context, arg pg.DeleteKehadiranSkpParams) error
+	ListPropinsi(c context.Context, arg request.SearchPropinsi) (any, error)
+	ListKabupaten(c context.Context, arg request.SearchKabupaten) (any, error)
+	ListIntervensi(c context.Context) (any, error)
 }
 
 type MainUsecaseImpl struct {
@@ -78,6 +84,11 @@ func (mu *MainUsecaseImpl) ListFasilitasKesehatan(c context.Context, arg request
 	err := copier.Copy(&params, &arg)
 	if err != nil {
 		return nil, err
+	}
+
+	if arg.KabID != nil && *arg.KabID != "" {
+		kid := uuid.FromStringOrNil(*arg.KabID)
+		params.KabID = &kid
 	}
 
 	res, err := mu.db.ListFasilitasKesehatan(c, params)
@@ -239,12 +250,32 @@ func (mu *MainUsecaseImpl) ListKontrak(c context.Context, arg request.SearchKont
 	return resp.WithPaginate(res, resp.CalculatePagination(arg.Page, arg.Limit, count)), nil
 }
 
+func (mu *MainUsecaseImpl) ListAktifKontrak(c context.Context, arg *string) (any, error) {
+
+	res, err := mu.db.ListAktifKontrak(c, arg)
+	if err != nil {
+		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get kontrak")
+	}
+	if len(res) == 0 {
+		return resp.WithPaginate([]string{}, nil), err
+	}
+	return resp.WithPaginate(res, nil), nil
+}
+
 func (mu *MainUsecaseImpl) UpdateKontrak(c context.Context, arg pg.UpdateKontrakPartialParams) (any, error) {
 	res, err := mu.db.UpdateKontrakPartial(c, arg)
 	if err != nil {
 		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed update kontrak")
 	}
 	return res, nil
+}
+
+func (mu *MainUsecaseImpl) KontrakById(c context.Context, arg uuid.UUID) (any, error) {
+	res, err := mu.db.GetKontrakByID(c, arg)
+	if err != nil {
+		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get kontrak")
+	}
+	return resp.WithPaginate(res, nil), nil
 }
 
 func (mu *MainUsecaseImpl) DeleteKontrak(c context.Context, arg pg.DeleteKontrakParams) error {
@@ -278,14 +309,14 @@ func (mu *MainUsecaseImpl) ListRuangan(c context.Context, arg request.SearchRuan
 		return nil, err
 	}
 
-	if arg.FasilitasID != nil && *arg.FasilitasID != "" {
-		fid := uuid.FromStringOrNil(*arg.FasilitasID)
-		params.FasilitasID = &fid
-	}
-	if arg.KontrakID != nil && *arg.KontrakID != "" {
-		kid := uuid.FromStringOrNil(*arg.KontrakID)
-		params.KontrakID = &kid
-	}
+	// if arg.FasilitasID != nil && *arg.FasilitasID != "" {
+	// 	fid := uuid.FromStringOrNil(*arg.FasilitasID)
+	// 	params.FasilitasID = &fid
+	// }
+	// if arg.KontrakID != nil && *arg.KontrakID != "" {
+	// 	kid := uuid.FromStringOrNil(*arg.KontrakID)
+	// 	params.KontrakID = &kid
+	// }
 
 	res, err := mu.db.ListRuangan(c, params)
 	if err != nil {
@@ -454,4 +485,73 @@ func (mu *MainUsecaseImpl) DeleteKehadiranSkp(c context.Context, arg pg.DeleteKe
 		return pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed delete kehadiran skp")
 	}
 	return nil
+}
+
+func (mu *MainUsecaseImpl) ListPropinsi(c context.Context, arg request.SearchPropinsi) (any, error) {
+
+	var params pg.ListDistinctPropinsiParams
+	err := copier.Copy(&params, &arg)
+	if err != nil {
+		return nil, err
+	}
+
+	params.Limit = 100
+	params.Offset = 0
+
+	res, err := mu.db.ListDistinctPropinsi(c, params)
+	if err != nil {
+		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get propinsi")
+	}
+	if len(res) == 0 {
+		return resp.WithPaginate([]string{}, nil), err
+	}
+
+	return resp.WithPaginate(res, nil), nil
+}
+
+func (mu *MainUsecaseImpl) ListKabupaten(c context.Context, arg request.SearchKabupaten) (any, error) {
+
+	var params pg.ListDistinctKabupatenParams
+	err := copier.Copy(&params, &arg)
+	if err != nil {
+		return nil, err
+	}
+
+	if arg.PropinsiID != nil && *arg.PropinsiID != "" {
+		kid := uuid.FromStringOrNil(*arg.PropinsiID)
+		params.PropinsiID = &kid
+	}
+
+	params.Limit = 100
+	params.Offset = 0
+
+	res, err := mu.db.ListDistinctKabupaten(c, params)
+	if err != nil {
+		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get kabupaten")
+	}
+	if len(res) == 0 {
+		return resp.WithPaginate([]string{}, nil), err
+	}
+
+	return resp.WithPaginate(res, nil), nil
+}
+
+func (mu *MainUsecaseImpl) RuanganById(c context.Context, arg uuid.UUID) (any, error) {
+	res, err := mu.db.GetRuanganById(c, arg)
+	if err != nil {
+		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get kontrak")
+	}
+	return resp.WithPaginate(res, nil), nil
+}
+func (mu *MainUsecaseImpl) ListIntervensi(c context.Context) (any, error) {
+
+	res, err := mu.db.ListKategoriSubkategoriIntervensi(c)
+	if err != nil {
+		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get intervensi")
+	}
+	if len(res) == 0 {
+		return resp.WithPaginate([]string{}, nil), err
+	}
+
+	return resp.WithPaginate(res, nil), nil
 }

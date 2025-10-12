@@ -1,6 +1,8 @@
 package resp
 
 import (
+	"e-klinik/infra/pg"
+	"e-klinik/internal/domain/entity"
 	"e-klinik/pkg"
 	"errors"
 	"net/http"
@@ -122,6 +124,42 @@ func CalculatePagination(page int32, limit int32, totalRows int64) *Pagination {
 		NextPage:    page < int32(totalPages),
 		PrevPage:    page > 1,
 	}
+}
+
+func BuildMenuTree(items []pg.GetR1ViewRecursiveRow, parentID *int32) []*entity.MenuNode {
+	var nodes []*entity.MenuNode
+
+	for _, item := range items {
+		// Skip jika view == nil (tidak ditampilkan di frontend)
+		if item.View == nil {
+			continue
+		}
+
+		// Root (ParentID == nil) atau cocok dengan parent
+		if (parentID == nil && item.ParentID == nil) ||
+			(parentID != nil && item.ParentID != nil && *item.ParentID == *parentID) {
+
+			node := &entity.MenuNode{
+				ID:          item.ID,
+				Label:       item.Label,
+				ResourceKey: item.ResourceKey,
+				Action:      item.Action,
+				View:        item.View,
+				Data:        item.Data,
+				Level:       item.Level,
+				Path:        item.Path,
+			}
+
+			children := BuildMenuTree(items, &item.ID)
+			if len(children) > 0 {
+				node.Children = children
+			}
+
+			nodes = append(nodes, node)
+		}
+	}
+
+	return nodes
 }
 
 type ResultCode int

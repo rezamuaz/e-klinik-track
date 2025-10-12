@@ -18,24 +18,17 @@ FROM public.users
 WHERE deleted_at IS NULL
   AND ($1::text IS NULL OR nama ILIKE '%' || $1 || '%')
   AND ($2::text IS NULL OR username ILIKE '%' || $2 || '%')
-  AND ($3::uuid IS NULL OR role = $3::uuid)
-  AND ($4::boolean IS NULL OR is_active = $4::boolean)
+  AND ($3::boolean IS NULL OR is_active = $3::boolean)
 `
 
 type CountUsersParams struct {
-	Nama     *string    `json:"nama"`
-	Username *string    `json:"username"`
-	Role     *uuid.UUID `json:"role"`
-	IsActive *bool      `json:"is_active"`
+	Nama     *string `json:"nama"`
+	Username *string `json:"username"`
+	IsActive *bool   `json:"is_active"`
 }
 
 func (q *Queries) CountUsers(ctx context.Context, arg CountUsersParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countUsers,
-		arg.Nama,
-		arg.Username,
-		arg.Role,
-		arg.IsActive,
-	)
+	row := q.db.QueryRow(ctx, countUsers, arg.Nama, arg.Username, arg.IsActive)
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
@@ -45,21 +38,19 @@ const createOrUpdateUser = `-- name: CreateOrUpdateUser :one
 INSERT INTO users (
   nama,
   username,
-  password,
-  role
+  password
 ) VALUES (
-  $1,$2,$3,$4
+  $1,$2,$3
 ) ON CONFLICT (username) DO UPDATE SET 
 nama = $1,
 password = $3
-RETURNING id, nama, username, password, role, last_active, is_active, locked_until, failed_attempts, last_failed_at, refresh, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at, CASE WHEN xmax = 0 THEN 'inserted' ELSE 'updated' END as operation
+RETURNING id, nama, username, password, last_active, is_active, locked_until, failed_attempts, last_failed_at, refresh, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at, CASE WHEN xmax = 0 THEN 'inserted' ELSE 'updated' END as operation
 `
 
 type CreateOrUpdateUserParams struct {
-	Nama     string    `json:"nama"`
-	Username string    `json:"username"`
-	Password string    `json:"password"`
-	Role     uuid.UUID `json:"role"`
+	Nama     string `json:"nama"`
+	Username string `json:"username"`
+	Password string `json:"password"`
 }
 
 type CreateOrUpdateUserRow struct {
@@ -67,7 +58,6 @@ type CreateOrUpdateUserRow struct {
 	Nama           string             `json:"nama"`
 	Username       string             `json:"username"`
 	Password       string             `json:"password"`
-	Role           uuid.UUID          `json:"role"`
 	LastActive     pgtype.Timestamptz `json:"last_active"`
 	IsActive       bool               `json:"is_active"`
 	LockedUntil    pgtype.Timestamptz `json:"locked_until"`
@@ -85,19 +75,13 @@ type CreateOrUpdateUserRow struct {
 }
 
 func (q *Queries) CreateOrUpdateUser(ctx context.Context, arg CreateOrUpdateUserParams) (CreateOrUpdateUserRow, error) {
-	row := q.db.QueryRow(ctx, createOrUpdateUser,
-		arg.Nama,
-		arg.Username,
-		arg.Password,
-		arg.Role,
-	)
+	row := q.db.QueryRow(ctx, createOrUpdateUser, arg.Nama, arg.Username, arg.Password)
 	var i CreateOrUpdateUserRow
 	err := row.Scan(
 		&i.ID,
 		&i.Nama,
 		&i.Username,
 		&i.Password,
-		&i.Role,
 		&i.LastActive,
 		&i.IsActive,
 		&i.LockedUntil,
@@ -156,7 +140,7 @@ func (q *Queries) GetUserActiveStatus(ctx context.Context, username string) (boo
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, nama, username, password, role, last_active, is_active, locked_until, failed_attempts, last_failed_at, refresh, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at FROM users
+SELECT id, nama, username, password, last_active, is_active, locked_until, failed_attempts, last_failed_at, refresh, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at FROM users
 WHERE id = $1 LIMIT 1
 `
 
@@ -168,7 +152,6 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.Nama,
 		&i.Username,
 		&i.Password,
-		&i.Role,
 		&i.LastActive,
 		&i.IsActive,
 		&i.LockedUntil,
@@ -186,59 +169,101 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 	return i, err
 }
 
+const getUserDetail = `-- name: GetUserDetail :one
+SELECT 
+  u.id,
+  u.nama,
+  u.username,
+  u.last_active,
+  u.is_active,
+  u.created_by,
+  u.created_at,
+  COALESCE(string_agg(DISTINCT ur.nama, ', '), '')::text AS roles
+FROM users u
+LEFT JOIN r5_user_roles uur 
+  ON uur.user_id = u.id 
+  AND uur.deleted_at IS NULL
+LEFT JOIN r4_roles ur 
+  ON ur.id = uur.role_id 
+  AND ur.deleted_at IS NULL
+WHERE u.id = $1
+GROUP BY u.id, u.nama, u.username, u.last_active, u.is_active, u.created_by, u.created_at
+`
+
+type GetUserDetailRow struct {
+	ID         uuid.UUID          `json:"id"`
+	Nama       string             `json:"nama"`
+	Username   string             `json:"username"`
+	LastActive pgtype.Timestamptz `json:"last_active"`
+	IsActive   bool               `json:"is_active"`
+	CreatedBy  *string            `json:"created_by"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	Roles      string             `json:"roles"`
+}
+
+func (q *Queries) GetUserDetail(ctx context.Context, id uuid.UUID) (GetUserDetailRow, error) {
+	row := q.db.QueryRow(ctx, getUserDetail, id)
+	var i GetUserDetailRow
+	err := row.Scan(
+		&i.ID,
+		&i.Nama,
+		&i.Username,
+		&i.LastActive,
+		&i.IsActive,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.Roles,
+	)
+	return i, err
+}
+
 const listUsers = `-- name: ListUsers :many
 SELECT
   id,
   nama,
   username,
-  role,
   last_active,
   is_active,
   locked_until,
   failed_attempts,
   last_failed_at,
-  refresh,
   created_by,
   created_at
 FROM public.users
 WHERE deleted_at IS NULL
   AND ($1::text IS NULL OR nama ILIKE '%' || $1 || '%')
   AND ($2::text IS NULL OR username ILIKE '%' || $2 || '%')
-  AND ($3::uuid IS NULL OR role = $3::uuid)
-  AND ($4::boolean IS NULL OR is_active = $4::boolean)
+  AND ($3::boolean IS NULL OR is_active = $3::boolean)
 ORDER BY
-  CASE WHEN $5::text = 'nama' AND $6::text = 'asc'  THEN nama END ASC,
-  CASE WHEN $5::text = 'nama' AND $6::text = 'desc' THEN nama END DESC,
-  CASE WHEN $5::text = 'username' AND $6::text = 'asc'  THEN username END ASC,
-  CASE WHEN $5::text = 'username' AND $6::text = 'desc' THEN username END DESC,
-  CASE WHEN $5::text = 'created_at' AND $6::text = 'asc'  THEN created_at END ASC,
-  CASE WHEN $5::text = 'created_at' AND $6::text = 'desc' THEN created_at END DESC
-LIMIT $8
-OFFSET $7
+  CASE WHEN $4::text = 'nama' AND $5::text = 'asc'  THEN nama END ASC,
+  CASE WHEN $4::text = 'nama' AND $5::text = 'desc' THEN nama END DESC,
+  CASE WHEN $4::text = 'username' AND $5::text = 'asc'  THEN username END ASC,
+  CASE WHEN $4::text = 'username' AND $5::text = 'desc' THEN username END DESC,
+  CASE WHEN $4::text = 'created_at' AND $5::text = 'asc'  THEN created_at END ASC,
+  CASE WHEN $4::text = 'created_at' AND $5::text = 'desc' THEN created_at END DESC
+LIMIT $7
+OFFSET $6
 `
 
 type ListUsersParams struct {
-	Nama     *string    `json:"nama"`
-	Username *string    `json:"username"`
-	Role     *uuid.UUID `json:"role"`
-	IsActive *bool      `json:"is_active"`
-	OrderBy  *string    `json:"order_by"`
-	Sort     *string    `json:"sort"`
-	Offset   int32      `json:"offset"`
-	Limit    int32      `json:"limit"`
+	Nama     *string `json:"nama"`
+	Username *string `json:"username"`
+	IsActive *bool   `json:"is_active"`
+	OrderBy  *string `json:"order_by"`
+	Sort     *string `json:"sort"`
+	Offset   int32   `json:"offset"`
+	Limit    int32   `json:"limit"`
 }
 
 type ListUsersRow struct {
 	ID             uuid.UUID          `json:"id"`
 	Nama           string             `json:"nama"`
 	Username       string             `json:"username"`
-	Role           uuid.UUID          `json:"role"`
 	LastActive     pgtype.Timestamptz `json:"last_active"`
 	IsActive       bool               `json:"is_active"`
 	LockedUntil    pgtype.Timestamptz `json:"locked_until"`
 	FailedAttempts *int32             `json:"failed_attempts"`
 	LastFailedAt   pgtype.Timestamptz `json:"last_failed_at"`
-	Refresh        *string            `json:"refresh"`
 	CreatedBy      *string            `json:"created_by"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
@@ -247,7 +272,6 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]ListUse
 	rows, err := q.db.Query(ctx, listUsers,
 		arg.Nama,
 		arg.Username,
-		arg.Role,
 		arg.IsActive,
 		arg.OrderBy,
 		arg.Sort,
@@ -265,13 +289,11 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]ListUse
 			&i.ID,
 			&i.Nama,
 			&i.Username,
-			&i.Role,
 			&i.LastActive,
 			&i.IsActive,
 			&i.LockedUntil,
 			&i.FailedAttempts,
 			&i.LastFailedAt,
-			&i.Refresh,
 			&i.CreatedBy,
 			&i.CreatedAt,
 		); err != nil {
@@ -349,22 +371,21 @@ SELECT u.id,
        u.username,
        u.password,
 	     u.nama,
-       u.refresh,
-       ur.id  AS role_id,
-       ur.tag AS role 
+       u.refresh
        FROM users u
-LEFT JOIN r4_user_roles ur ON ur.id = u.role
+LEFT JOIN r5_user_roles uur ON uur.user_id = u.id AND uur.deleted_at IS NULL
+LEFT JOIN r4_roles ur ON ur.id = uur.role_id AND ur.deleted_at IS NULL
 WHERE u.id = $1
+  AND u.deleted_at IS NULL
+GROUP BY u.id, u.username, u.password, u.nama
 `
 
 type UsersFindByIdRow struct {
-	ID       uuid.UUID  `json:"id"`
-	Username string     `json:"username"`
-	Password string     `json:"password"`
-	Nama     string     `json:"nama"`
-	Refresh  *string    `json:"refresh"`
-	RoleID   *uuid.UUID `json:"role_id"`
-	Role     *string    `json:"role"`
+	ID       uuid.UUID `json:"id"`
+	Username string    `json:"username"`
+	Password string    `json:"password"`
+	Nama     string    `json:"nama"`
+	Refresh  *string   `json:"refresh"`
 }
 
 func (q *Queries) UsersFindById(ctx context.Context, id uuid.UUID) (UsersFindByIdRow, error) {
@@ -376,31 +397,39 @@ func (q *Queries) UsersFindById(ctx context.Context, id uuid.UUID) (UsersFindByI
 		&i.Password,
 		&i.Nama,
 		&i.Refresh,
-		&i.RoleID,
-		&i.Role,
 	)
 	return i, err
 }
 
 const usersFindByUsername = `-- name: UsersFindByUsername :one
-SELECT u.id,
-       u.username,
-       u.password,
-	     u.nama,
-       ur.id  AS role_id,
-       ur.tag AS role 
-       FROM users u
-LEFT JOIN r4_user_roles ur ON ur.id = u.role
+SELECT 
+    u.id,
+    u.username,
+    u.password,
+    u.nama,
+      COALESCE(
+        string_agg(ur.tag, ',' ORDER BY ur.tag), 
+        '' 
+    ) AS roles,
+    COALESCE(
+        string_agg(ur.id::text, ',' ORDER BY ur.id::text),
+        ''
+    ) AS role_ids
+FROM users u
+LEFT JOIN r5_user_roles uur ON uur.user_id = u.id AND uur.deleted_at IS NULL
+LEFT JOIN r4_roles ur ON ur.id = uur.role_id AND ur.deleted_at IS NULL
 WHERE u.username = $1
+  AND u.deleted_at IS NULL
+GROUP BY u.id, u.username, u.password, u.nama
 `
 
 type UsersFindByUsernameRow struct {
-	ID       uuid.UUID  `json:"id"`
-	Username string     `json:"username"`
-	Password string     `json:"password"`
-	Nama     string     `json:"nama"`
-	RoleID   *uuid.UUID `json:"role_id"`
-	Role     *string    `json:"role"`
+	ID       uuid.UUID   `json:"id"`
+	Username string      `json:"username"`
+	Password string      `json:"password"`
+	Nama     string      `json:"nama"`
+	Roles    interface{} `json:"roles"`
+	RoleIds  interface{} `json:"role_ids"`
 }
 
 func (q *Queries) UsersFindByUsername(ctx context.Context, username string) (UsersFindByUsernameRow, error) {
@@ -411,8 +440,8 @@ func (q *Queries) UsersFindByUsername(ctx context.Context, username string) (Use
 		&i.Username,
 		&i.Password,
 		&i.Nama,
-		&i.RoleID,
-		&i.Role,
+		&i.Roles,
+		&i.RoleIds,
 	)
 	return i, err
 }

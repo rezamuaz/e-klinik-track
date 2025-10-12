@@ -60,6 +60,10 @@ func Int64ToStr(num int64) string {
 	return strconv.FormatInt(num, 10)
 }
 
+func Int32ToStr(v int32) string {
+	return strconv.FormatInt(int64(v), 10)
+}
+
 func StrIsEmpty(value string) bool {
 	if value == "" {
 		return false

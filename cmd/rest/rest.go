@@ -3,6 +3,7 @@ package rest
 import (
 	"context"
 	"e-klinik/config"
+	"e-klinik/infra/pg"
 	"e-klinik/infra/types"
 	"e-klinik/infra/worker"
 	"e-klinik/internal/di"
@@ -10,6 +11,7 @@ import (
 	"e-klinik/pkg/constant"
 	"e-klinik/pkg/logging"
 	"e-klinik/utils"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -52,24 +54,40 @@ func HttpServer(cfg *config.Config, rmq *pkg.RabbitMQ, pg *pkg.Postgres) {
 
 	m, err := model.NewModelFromString(`
 	[request_definition]
-	r = sub, obj, act
+	r = sub, obj, act, a, s, t
 
 	[policy_definition]
-	p = sub, obj, act
+	p = sub, obj, act, a, s, t
+
+	[role_definition]
+	g = _, _  
+	g2 = _, _ 
 
 	[policy_effect]
 	e = some(where (p.eft == allow))
 
 	[matchers]
-	m = r.sub == p.sub && r.obj == p.obj && r.act == p.act
+	m = g(r.sub, "1") || (g(r.sub, p.sub) && r.obj == p.obj && r.act == p.act)
 	`)
 
 	casbin, err := casbin.NewEnforcer(m, adapter)
+	if err != nil {
+		log.Fatalf("Failed to create adapter: %v", err)
+	}
+	err = casbin.LoadPolicy()
+	if err != nil {
+		log.Fatalf("Failed to load policy: %v", err)
+	}
 
-	cacheService := pkg.NewRistrettoCache()
-	defer cacheService.Close()
+	//Initialize redis
+	rdb := pkg.NewRedisCache(cfg)
+
+	err = LoadResourceMappingsIntoRedis(rdb, pg)
+	if err != nil {
+		log.Print("Failed to load data:", err)
+	}
 	//Dependency Injection
-	init := di.Injector(cfg, pubCh, pg, cacheService, casbin)
+	init := di.Injector(cfg, pubCh, pg, rdb, casbin)
 	server := &http.Server{
 		Addr:         _defaultAddr,
 		Handler:      init.Router,
@@ -180,4 +198,54 @@ func RabbitConsumer(rmq *pkg.RabbitMQ, cfg *config.Config, pg *pkg.Postgres, log
 	_ = server.RMQ.Conn.Close()
 
 	log.Println("Server shutdown gracefully.")
+}
+
+func LoadResourceMappingsIntoRedis(rdb *pkg.RedisCache, postgre *pkg.Postgres) error {
+	log.Println("[Cache] Memuat pemetaan resource dari database (SQLC) ke Redis...")
+
+	ctx := context.Background()
+	queries := pg.New(postgre.Pool)
+
+	// 1. Ambil semua data pemetaan dari DB
+	mappings, err := queries.ListResourceMappings(ctx)
+	if err != nil {
+		return fmt.Errorf("gagal mengambil pemetaan dari DB (SQLC): %w", err)
+	}
+
+	// 2. Masukkan ke Redis dalam satu transaksi (Pipeline)
+	pipe := rdb.Client.Pipeline()
+	var validMappingsCount int // Counter untuk baris yang berhasil diproses
+
+	for _, m := range mappings {
+		// Cek Keamanan: Pastikan Path dan Method TIDAK nil.
+		// Hanya resource API yang memiliki Path dan Method yang harus dicache.
+		if m.Path == nil || m.Method == nil {
+			// Log baris data yang diabaikan (mungkin itu adalah resource VIEW/Menu)
+			log.Printf("[Cache] Mengabaikan resource key: %s (Path/Method nil)", m.ResourceKey)
+			continue
+		}
+
+		// DEREFERENCE POINTER dengan aman (gunakan * di depan)
+		// Kita yakin pointer tidak nil karena telah diperiksa di atas.
+		path := *m.Path
+		method := *m.Method
+
+		// Format Key Redis: /api/articles:POST
+		redisKey := fmt.Sprintf("%s:%s", path, method)
+
+		// Format Value Redis: resourceKey:action (e.g., data:article:create)
+		redisValue := fmt.Sprintf("%s:%s", m.ResourceKey, m.Action)
+
+		pipe.Set(ctx, redisKey, redisValue, 0)
+		validMappingsCount++
+	}
+
+	// 3. Eksekusi Pipeline
+	if _, err := pipe.Exec(ctx); err != nil {
+		return fmt.Errorf("gagal mengeksekusi Redis pipeline: %w", err)
+	}
+
+	// Gunakan validMappingsCount, bukan len(mappings)
+	log.Printf("[Cache] ✅ Berhasil memuat %d pemetaan resource API ke Redis. (%d total baris dari DB)", validMappingsCount, len(mappings))
+	return nil
 }

@@ -14,27 +14,29 @@ import (
 
 const countRuangan = `-- name: CountRuangan :one
 SELECT COUNT(*)::bigint
-FROM ruangan
-WHERE deleted_at IS NULL
-  AND ($1::text IS NULL OR nama_ruangan ILIKE '%' || $1 || '%')
-  AND ($2::boolean IS NULL OR is_active = $2::boolean)
-  AND ($3::uuid IS NULL OR fasilitas_id = $3::uuid)
-  AND ($4::uuid IS NULL OR kontrak_id = $4::uuid)
+FROM ruangan r
+LEFT JOIN fasilitas_kesehatan f ON r.fasilitas_id = f.id
+LEFT JOIN kontrak k ON r.kontrak_id = k.id
+WHERE r.deleted_at IS NULL
+  AND ($1::text IS NULL OR r.nama_ruangan ILIKE '%' || $1::text || '%')
+  AND ($2::boolean IS NULL OR r.is_active = $2::boolean)
+  AND ($3::text IS NULL OR f.nama ILIKE '%' || $3::text || '%')
+  AND ($4::text IS NULL OR k.no_utama ILIKE '%' || $4::text || '%')
 `
 
 type CountRuanganParams struct {
-	NamaRuangan *string    `json:"nama_ruangan"`
-	IsActive    *bool      `json:"is_active"`
-	FasilitasID *uuid.UUID `json:"fasilitas_id"`
-	KontrakID   *uuid.UUID `json:"kontrak_id"`
+	NamaRuangan *string `json:"nama_ruangan"`
+	IsActive    *bool   `json:"is_active"`
+	Fasilitas   *string `json:"fasilitas"`
+	Kontrak     *string `json:"kontrak"`
 }
 
 func (q *Queries) CountRuangan(ctx context.Context, arg CountRuanganParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countRuangan,
 		arg.NamaRuangan,
 		arg.IsActive,
-		arg.FasilitasID,
-		arg.KontrakID,
+		arg.Fasilitas,
+		arg.Kontrak,
 	)
 	var column_1 int64
 	err := row.Scan(&column_1)
@@ -124,39 +126,97 @@ func (q *Queries) GetRuangan(ctx context.Context, id uuid.UUID) (Ruangan, error)
 	return i, err
 }
 
+const getRuanganById = `-- name: GetRuanganById :one
+SELECT
+  r.id,
+  r.fasilitas_id,
+  r.kontrak_id,
+  r.nama_ruangan,
+  r.is_active,
+  f.nama as rumah_sakit,
+  k.no_utama as kontrak,
+  f.propinsi,
+  f.kab,
+  r.created_by,
+  r.created_at
+FROM ruangan r
+LEFT JOIN fasilitas_kesehatan f ON r.fasilitas_id = f.id
+LEFT JOIN kontrak k ON r.kontrak_id = k.id
+WHERE r.deleted_at IS NULL AND r.id = $1
+`
+
+type GetRuanganByIdRow struct {
+	ID          uuid.UUID          `json:"id"`
+	FasilitasID uuid.UUID          `json:"fasilitas_id"`
+	KontrakID   uuid.UUID          `json:"kontrak_id"`
+	NamaRuangan string             `json:"nama_ruangan"`
+	IsActive    bool               `json:"is_active"`
+	RumahSakit  *string            `json:"rumah_sakit"`
+	Kontrak     *string            `json:"kontrak"`
+	Propinsi    *string            `json:"propinsi"`
+	Kab         *string            `json:"kab"`
+	CreatedBy   *string            `json:"created_by"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) GetRuanganById(ctx context.Context, id uuid.UUID) (GetRuanganByIdRow, error) {
+	row := q.db.QueryRow(ctx, getRuanganById, id)
+	var i GetRuanganByIdRow
+	err := row.Scan(
+		&i.ID,
+		&i.FasilitasID,
+		&i.KontrakID,
+		&i.NamaRuangan,
+		&i.IsActive,
+		&i.RumahSakit,
+		&i.Kontrak,
+		&i.Propinsi,
+		&i.Kab,
+		&i.CreatedBy,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const listRuangan = `-- name: ListRuangan :many
 SELECT
-  id,
-  fasilitas_id,
-  kontrak_id,
-  nama_ruangan,
-  is_active,
-  created_by,
-  created_at
-FROM ruangan
-WHERE deleted_at IS NULL
-  AND ($1::text IS NULL OR nama_ruangan ILIKE '%' || $1 || '%')
-  AND ($2::boolean IS NULL OR is_active = $2::boolean)
-  AND ($3::uuid IS NULL OR fasilitas_id = $3::uuid)
-  AND ($4::uuid IS NULL OR kontrak_id = $4::uuid)
+  r.id,
+  r.fasilitas_id,
+  r.kontrak_id,
+  r.nama_ruangan,
+  r.is_active,
+  f.nama as rumah_sakit,
+  k.no_utama as kontrak,
+  f.propinsi,
+  f.kab,
+  r.created_by,
+  r.created_at
+FROM ruangan r
+LEFT JOIN fasilitas_kesehatan f ON r.fasilitas_id = f.id
+LEFT JOIN kontrak k ON r.kontrak_id = k.id
+WHERE r.deleted_at IS NULL
+  AND ($1::text IS NULL OR r.nama_ruangan ILIKE '%' || $1::text || '%')
+  AND ($2::boolean IS NULL OR r.is_active = $2::boolean)
+  AND ($3::text IS NULL OR f.nama ILIKE '%' || $3::text || '%')
+  AND ($4::text IS NULL OR k.no_utama ILIKE '%' || $4::text || '%')
 ORDER BY
-  CASE WHEN $5::text = 'nama_ruangan' AND $6::text = 'asc'  THEN nama_ruangan END ASC,
-  CASE WHEN $5::text = 'nama_ruangan' AND $6::text = 'desc' THEN nama_ruangan END DESC,
-  CASE WHEN $5::text = 'created_at' AND $6::text = 'asc'  THEN created_at END ASC,
-  CASE WHEN $5::text = 'created_at' AND $6::text = 'desc' THEN created_at END DESC
+  CASE WHEN $5::text = 'nama_ruangan' AND $6::text = 'asc'  THEN r.nama_ruangan END ASC,
+  CASE WHEN $5::text = 'nama_ruangan' AND $6::text = 'desc' THEN r.nama_ruangan END DESC,
+  CASE WHEN $5::text = 'created_at' AND $6::text = 'asc'  THEN r.created_at END ASC,
+  CASE WHEN $5::text = 'created_at' AND $6::text = 'desc' THEN r.created_at END DESC
 LIMIT $8
 OFFSET $7
 `
 
 type ListRuanganParams struct {
-	NamaRuangan *string    `json:"nama_ruangan"`
-	IsActive    *bool      `json:"is_active"`
-	FasilitasID *uuid.UUID `json:"fasilitas_id"`
-	KontrakID   *uuid.UUID `json:"kontrak_id"`
-	OrderBy     *string    `json:"order_by"`
-	Sort        *string    `json:"sort"`
-	Offset      int32      `json:"offset"`
-	Limit       int32      `json:"limit"`
+	NamaRuangan *string `json:"nama_ruangan"`
+	IsActive    *bool   `json:"is_active"`
+	Fasilitas   *string `json:"fasilitas"`
+	Kontrak     *string `json:"kontrak"`
+	OrderBy     *string `json:"order_by"`
+	Sort        *string `json:"sort"`
+	Offset      int32   `json:"offset"`
+	Limit       int32   `json:"limit"`
 }
 
 type ListRuanganRow struct {
@@ -165,6 +225,10 @@ type ListRuanganRow struct {
 	KontrakID   uuid.UUID          `json:"kontrak_id"`
 	NamaRuangan string             `json:"nama_ruangan"`
 	IsActive    bool               `json:"is_active"`
+	RumahSakit  *string            `json:"rumah_sakit"`
+	Kontrak     *string            `json:"kontrak"`
+	Propinsi    *string            `json:"propinsi"`
+	Kab         *string            `json:"kab"`
 	CreatedBy   *string            `json:"created_by"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
@@ -173,8 +237,8 @@ func (q *Queries) ListRuangan(ctx context.Context, arg ListRuanganParams) ([]Lis
 	rows, err := q.db.Query(ctx, listRuangan,
 		arg.NamaRuangan,
 		arg.IsActive,
-		arg.FasilitasID,
-		arg.KontrakID,
+		arg.Fasilitas,
+		arg.Kontrak,
 		arg.OrderBy,
 		arg.Sort,
 		arg.Offset,
@@ -193,6 +257,10 @@ func (q *Queries) ListRuangan(ctx context.Context, arg ListRuanganParams) ([]Lis
 			&i.KontrakID,
 			&i.NamaRuangan,
 			&i.IsActive,
+			&i.RumahSakit,
+			&i.Kontrak,
+			&i.Propinsi,
+			&i.Kab,
 			&i.CreatedBy,
 			&i.CreatedAt,
 		); err != nil {
@@ -209,36 +277,30 @@ func (q *Queries) ListRuangan(ctx context.Context, arg ListRuanganParams) ([]Lis
 const updateRuanganPartial = `-- name: UpdateRuanganPartial :one
 UPDATE ruangan
 SET
-  fasilitas_id = COALESCE($2, fasilitas_id),
-  kontrak_id   = COALESCE($3, kontrak_id),
-  nama_ruangan = COALESCE($4, nama_ruangan),
-  is_active    = COALESCE($5, is_active),
-  updated_by   = COALESCE($6, updated_by),
-  updated_note = COALESCE($7, updated_note),
+  -- fasilitas_id = COALESCE(sqlc.narg('fasilitas_id'), fasilitas_id),
+  -- kontrak_id   = COALESCE(sqlc.narg('kontrak_id'), kontrak_id),
+  nama_ruangan = COALESCE($2, nama_ruangan),
+  is_active    = COALESCE($3, is_active),
+  updated_by   = COALESCE($4, updated_by),
+  -- updated_note = COALESCE(sqlc.narg('updated_note'), updated_note),
   updated_at   = now()
 WHERE id = $1
 RETURNING id, fasilitas_id, kontrak_id, nama_ruangan, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at
 `
 
 type UpdateRuanganPartialParams struct {
-	ID          uuid.UUID  `json:"id"`
-	FasilitasID *uuid.UUID `json:"fasilitas_id"`
-	KontrakID   *uuid.UUID `json:"kontrak_id"`
-	NamaRuangan *string    `json:"nama_ruangan"`
-	IsActive    *bool      `json:"is_active"`
-	UpdatedBy   *string    `json:"updated_by"`
-	UpdatedNote *string    `json:"updated_note"`
+	ID          uuid.UUID `json:"id"`
+	NamaRuangan *string   `json:"nama_ruangan"`
+	IsActive    *bool     `json:"is_active"`
+	UpdatedBy   *string   `json:"updated_by"`
 }
 
 func (q *Queries) UpdateRuanganPartial(ctx context.Context, arg UpdateRuanganPartialParams) (Ruangan, error) {
 	row := q.db.QueryRow(ctx, updateRuanganPartial,
 		arg.ID,
-		arg.FasilitasID,
-		arg.KontrakID,
 		arg.NamaRuangan,
 		arg.IsActive,
 		arg.UpdatedBy,
-		arg.UpdatedNote,
 	)
 	var i Ruangan
 	err := row.Scan(

@@ -1,7 +1,7 @@
-CREATE TABLE IF NOT EXISTS r5_permission_role (
-    id UUID NOT NULL DEFAULT uuidv7(),
-    permission_id UUID NOT NULL,
-    user_roles_id UUID NOT NULL,
+CREATE TABLE IF NOT EXISTS r4_roles (
+    id INT GENERATED ALWAYS AS IDENTITY,
+    tag VARCHAR NOT NULL,
+    nama VARCHAR NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT true,
     deleted_by VARCHAR,
     deleted_at TIMESTAMPTZ,
@@ -9,5 +9,5 @@ CREATE TABLE IF NOT EXISTS r5_permission_role (
     updated_at TIMESTAMPTZ,
     created_by VARCHAR,
     created_at TIMESTAMPTZ DEFAULT now(),
-    CONSTRAINT r5_permission_role_pkey PRIMARY KEY (id)
+    CONSTRAINT r4_roles_pkey PRIMARY KEY (id)
 );

@@ -63,6 +63,7 @@ type SearchFasilitasKesehatan struct {
 	Nama     *string `form:"nama" json:"nama"`
 	Propinsi *string `form:"propinsi" json:"propinsi"`
 	Kab      *string `form:"kab" json:"kab"`
+	KabID    *string `form:"kab_id" json:"kab_id"`
 	Tipe     *string `form:"tipe" json:"tipe"`
 	IsActive *bool   `form:"is_active" json:"is_active"`
 	OrderBy  *string `form:"order_by" json:"order_by"`
@@ -85,6 +86,10 @@ type SearchKontrak struct {
 	Limit             int32   `form:"limit" json:"limit"`
 }
 
+type SearchAktifKontrak struct {
+	FasilitasNama *string `form:"fasilitas_nama" json:"fasilitas_nama"`
+}
+
 type CreateKontrak struct {
 	FasilitasID    uuid.UUID `json:"fasilitas_id"`
 	Nama           string    `json:"nama"`
@@ -98,8 +103,8 @@ type CreateKontrak struct {
 type SearchRuangan struct {
 	Page        int32   `form:"page" json:"page"`
 	NamaRuangan *string `form:"nama_ruangan" json:"nama_ruangan"`
-	FasilitasID *string `form:"fasilitas_id" json:"fasilitas_id"`
-	KontrakID   *string `form:"kontrak_id" json:"kontrak_id"`
+	Fasilitas   *string `form:"fasilitas" json:"fasilitas"`
+	Kontrak     *string `form:"kontrak" json:"kontrak"`
 	IsActive    *bool   `form:"is_active" json:"is_active"`
 	OrderBy     *string `form:"order_by" json:"order_by"`
 	Sort        *string `form:"sort" json:"sort"`
@@ -130,4 +135,54 @@ type SearchKehadiranSkp struct {
 	Sort            *string `form:"sort" json:"sort"`
 	Offset          int32   `form:"offset" json:"offset"`
 	Limit           int32   `form:"limit" json:"limit"`
+}
+
+type SearchPropinsi struct {
+	Propinsi *string `form:"propinsi" json:"propinsi"`
+}
+type SearchKabupaten struct {
+	Kab        *string `form:"kab" json:"kab"`
+	PropinsiID *string `form:"propinsi_id" json:"propinsi_id"`
+}
+
+type CreateRoleForUser struct {
+	UserID    uuid.UUID `json:"user_id"`
+	RoleID    uuid.UUID `json:"role_id"`
+	CreatedBy *string   `json:"created_by"`
+}
+
+type SearchMenu struct {
+	Label *string `form:"label" json:"label"`
+}
+
+type SearchUser struct {
+	Page     int32   `form:"page" json:"page"`
+	Nama     *string `form:"nama" json:"nama"`
+	Username *string `form:"username" json:"username"`
+	IsActive *bool   `form:"is_active" json:"is_active"`
+	OrderBy  *string `form:"order_by" json:"order_by"`
+	Sort     *string `form:"sort" json:"sort"`
+	Offset   int32   `form:"offset" json:"offset"`
+	Limit    int32   `form:"limit" json:"limit"`
+}
+type UpdateUser struct {
+	Nama        *string   `json:"nama"`
+	IsActive    *bool     `json:"is_active"`
+	Password    *string   `json:"password"`
+	Refresh     *string   `json:"refresh"`
+	UpdatedNote *string   `json:"updated_note"`
+	UpdatedBy   *string   `json:"updated_by"`
+	ID          uuid.UUID `json:"id"`
+	Role        []Option  `json:"role"`
+}
+
+type Option struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
+}
+
+type UpdateRolePolicy struct {
+	Policy    []int32 `json:"policy"`
+	RoleID    int32   `json:"role_id"`
+	CreatedBy *string `json:"created_by"`
 }

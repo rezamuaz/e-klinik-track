@@ -1,15 +1,21 @@
 package handler
 
 import (
+	"context"
 	"e-klinik/api/helper"
 	"e-klinik/config"
+	"e-klinik/infra/pg"
+	"e-klinik/pkg"
+	"e-klinik/utils"
 
 	"e-klinik/internal/domain/request"
+	"e-klinik/internal/domain/resp"
 	"e-klinik/internal/usecase"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gofrs/uuid/v5"
 )
 
 type AuthHandler interface {
@@ -20,13 +26,15 @@ type AuthHandler interface {
 
 type AuthHandlerImpl struct {
 	Uu  *usecase.UserUsecaseImpl
+	Mu  *usecase.MainUsecaseImpl
 	Cfg *config.Config
 }
 
-func NewAuthHandler(Uu *usecase.UserUsecaseImpl, cfg *config.Config) *AuthHandlerImpl {
+func NewAuthHandler(Uu *usecase.UserUsecaseImpl, Mu *usecase.MainUsecaseImpl, cfg *config.Config) *AuthHandlerImpl {
 	return &AuthHandlerImpl{
 		Uu:  Uu,
 		Cfg: cfg,
+		Mu:  Mu,
 	}
 }
 
@@ -87,6 +95,34 @@ func (lc *AuthHandlerImpl) Refresh(c *gin.Context) {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, helper.GenerateBaseResponseWithAnyError(nil, false, helper.InternalError, err.Error()))
 		return
 	}
+
+	c.JSON(http.StatusOK, helper.GenerateBaseResponse(user, true, helper.Success))
+
+}
+
+func (lc *AuthHandlerImpl) Logout(c *gin.Context) {
+
+	cookie, err := c.Cookie("auth_token")
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, helper.GenerateBaseResponse(nil, false, helper.NotFoundError))
+		return
+	}
+
+	user, err := lc.Uu.Logout(c, cookie)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, helper.GenerateBaseResponseWithAnyError(nil, false, helper.InternalError, err.Error()))
+		return
+	}
+
+	c.SetCookie(
+		"auth_token", // nama cookie kamu
+		"",           // kosongkan
+		-1,           // expired segera
+		"/",          // seluruh path
+		"localhost",  // domain default
+		false,        // secure: true jika pakai https
+		true,         // httpOnly
+	)
 
 	c.JSON(http.StatusOK, helper.GenerateBaseResponse(user, true, helper.Success))
 
@@ -199,3 +235,500 @@ func (lc *AuthHandlerImpl) Refresh(c *gin.Context) {
 // 	// Copy the response body from the target to the client
 // 	c.Writer.Write(resp.Body)
 // }
+
+func (lc *AuthHandlerImpl) AddRoleUser(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+
+	var p pg.CreateUserRoleParams
+	err := c.ShouldBindJSON(&p)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed created role", pkg.WrapErrorf(err, pkg.ErrorCodeInvalidArgument, "invalid json"))
+		return
+	}
+	value, _ := c.Get("nama")
+	p.CreatedBy = utils.StringPtr(value.(string))
+
+	user, err := lc.Uu.AddRoleForUser(ctx, p)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, helper.GenerateBaseResponseWithAnyError(nil, false, helper.InternalError, err.Error()))
+		return
+	}
+
+	c.JSON(http.StatusOK, helper.GenerateBaseResponse(user, true, helper.Success))
+
+}
+
+func (lc *AuthHandlerImpl) AddRolePolicy(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+
+	var p pg.CreateUserRoleParams
+	err := c.ShouldBindJSON(&p)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed created role", pkg.WrapErrorf(err, pkg.ErrorCodeInvalidArgument, "invalid json"))
+		return
+	}
+	value, _ := c.Get("nama")
+	p.CreatedBy = utils.StringPtr(value.(string))
+
+	user, err := lc.Uu.AddRoleForUser(ctx, p)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, helper.GenerateBaseResponseWithAnyError(nil, false, helper.InternalError, err.Error()))
+		return
+	}
+
+	c.JSON(http.StatusOK, helper.GenerateBaseResponse(user, true, helper.Success))
+
+}
+
+func (lc *AuthHandlerImpl) AddMenu(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+
+	var p pg.CreateR1ViewParams
+	err := c.ShouldBindJSON(&p)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed created role", pkg.WrapErrorf(err, pkg.ErrorCodeInvalidArgument, "invalid json"))
+		return
+	}
+
+	user, err := lc.Uu.AddMenu(ctx, p)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, helper.GenerateBaseResponseWithAnyError(nil, false, helper.InternalError, err.Error()))
+		return
+	}
+
+	c.JSON(http.StatusOK, helper.GenerateBaseResponse(user, true, helper.Success))
+}
+func (lc *AuthHandlerImpl) ListMenu(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+
+	var req request.SearchMenu
+
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(400, gin.H{"error": "Invalid query parameters"})
+		return
+	}
+
+	result, err := lc.Uu.ListMenu(ctx, req)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed get menu", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(result, true, 0))
+
+}
+
+func (lc *AuthHandlerImpl) UpdateMenu(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+	id := c.Param("id")
+	var p pg.UpdateR1ViewParams
+	p.ID = utils.StrToInt32(id)
+	err := c.ShouldBindJSON(&p)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed update menu", pkg.WrapErrorf(err, pkg.ErrorCodeInvalidArgument, "invalid json"))
+		return
+	}
+	value, _ := c.Get("nama")
+	p.UpdatedBy = utils.StringPtr(value.(string))
+
+	res, err := lc.Uu.EditMenu(ctx, p)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed update menu", err)
+		return
+	}
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(res, true, 0))
+}
+
+func (lc *AuthHandlerImpl) DelMenu(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+	id := c.Query("id")
+	if id == "" {
+		resp.GenerateBaseResponseWithError(c, "delete menu failed", pkg.NewErrorf(pkg.ErrorCodeInvalidArgument, "invalid id"))
+
+	}
+	p := pg.DeleteR1ViewParams{
+		ID:        utils.StrToInt32(id),
+		DeletedBy: nil}
+	value, _ := c.Get("nama")
+	p.DeletedBy = utils.StringPtr(value.(string))
+
+	err := lc.Uu.DeleteMenu(ctx, p)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "delete menu failed", err)
+		return
+	}
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(id, true, 0))
+}
+func (lc *AuthHandlerImpl) MenuDetail(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+	id := c.Param("id")
+	if id == "" {
+		resp.GenerateBaseResponseWithError(c, "detail  failed", pkg.NewErrorf(pkg.ErrorCodeInvalidArgument, "invalid id"))
+
+	}
+	p := utils.StrToInt32(id)
+
+	res, err := lc.Uu.MenuById(ctx, p)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "detail failed", err)
+		return
+	}
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(res, true, 0))
+}
+func (lc *AuthHandlerImpl) ListAccess(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+
+	var req request.SearchMenu
+
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(400, gin.H{"error": "Invalid query parameters"})
+		return
+	}
+
+	result, err := lc.Uu.AccessList(ctx, req)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed get menu", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(result, true, 0))
+
+}
+
+func (lc *AuthHandlerImpl) CreateRole(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+
+	var p pg.CreateR4RoleParams
+	err := c.ShouldBindJSON(&p)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed created", pkg.WrapErrorf(err, pkg.ErrorCodeInvalidArgument, "invalid json"))
+		return
+	}
+	value, _ := c.Get("nama")
+	p.CreatedBy = utils.StringPtr(value.(string))
+
+	result, err := lc.Uu.AddRole(ctx, p)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed created", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(result, true, resp.Success))
+
+}
+func (lc *AuthHandlerImpl) RoleById(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+	id := c.Param("id")
+	if id == "" {
+		resp.GenerateBaseResponseWithError(c, "detail failed", pkg.NewErrorf(pkg.ErrorCodeInvalidArgument, "invalid id"))
+
+	}
+	p := utils.StrToInt32(id)
+
+	res, err := lc.Uu.GetRoleById(ctx, p)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "detail failed", err)
+		return
+	}
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(res, true, 0))
+}
+func (lc *AuthHandlerImpl) ListRole(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+
+	var req request.SearchRuangan
+
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(400, gin.H{"error": "Invalid query parameters"})
+		return
+	}
+
+	result, err := lc.Uu.ListRole(ctx)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed get data", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(result, true, 0))
+
+}
+
+func (lc *AuthHandlerImpl) UpdateRole(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+	id := c.Param("id")
+	var p pg.UpdateR4RoleParams
+	p.ID = utils.StrToInt32(id)
+	err := c.ShouldBindJSON(&p)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed update", pkg.WrapErrorf(err, pkg.ErrorCodeInvalidArgument, "invalid json"))
+		return
+	}
+	value, _ := c.Get("nama")
+	p.UpdatedBy = utils.StringPtr(value.(string))
+
+	res, err := lc.Uu.UpdateRole(ctx, p)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed update ", err)
+		return
+	}
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(res, true, 0))
+}
+
+func (lc *AuthHandlerImpl) DelRole(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+	id := c.Query("id")
+	if id == "" {
+		resp.GenerateBaseResponseWithError(c, "delete failed", pkg.NewErrorf(pkg.ErrorCodeInvalidArgument, "invalid id"))
+
+	}
+	p := pg.DeleteR4RoleParams{
+		ID:        utils.StrToInt32(id),
+		DeletedBy: nil}
+	value, _ := c.Get("nama")
+	p.DeletedBy = utils.StringPtr(value.(string))
+
+	err := lc.Uu.DeleteRoleById(ctx, p)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "delete failed", err)
+		return
+	}
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(id, true, 0))
+}
+
+func (lc *AuthHandlerImpl) CreateGroup(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+
+	var p pg.CreateR2GroupParams
+	err := c.ShouldBindJSON(&p)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed created", pkg.WrapErrorf(err, pkg.ErrorCodeInvalidArgument, "invalid json"))
+		return
+	}
+	value, _ := c.Get("nama")
+	p.CreatedBy = utils.StringPtr(value.(string))
+
+	result, err := lc.Uu.AddGroup(ctx, p)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed created", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(result, true, resp.Success))
+
+}
+func (lc *AuthHandlerImpl) GroupById(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+	id := c.Param("id")
+	if id == "" {
+		resp.GenerateBaseResponseWithError(c, "detail failed", pkg.NewErrorf(pkg.ErrorCodeInvalidArgument, "invalid id"))
+
+	}
+	p := utils.StrToInt32(id)
+
+	res, err := lc.Uu.GetGroupById(ctx, p)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "detail failed", err)
+		return
+	}
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(res, true, 0))
+}
+func (lc *AuthHandlerImpl) ListGroup(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+
+	var req request.SearchRuangan
+
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(400, gin.H{"error": "Invalid query parameters"})
+		return
+	}
+
+	result, err := lc.Uu.ListGroup(ctx)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed get data", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(result, true, 0))
+
+}
+
+func (lc *AuthHandlerImpl) UpdateGroup(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+	id := c.Param("id")
+	var p pg.UpdateR2GroupParams
+	p.ID = utils.StrToInt32(id)
+	err := c.ShouldBindJSON(&p)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed update", pkg.WrapErrorf(err, pkg.ErrorCodeInvalidArgument, "invalid json"))
+		return
+	}
+	value, _ := c.Get("nama")
+	p.UpdatedBy = utils.StringPtr(value.(string))
+
+	res, err := lc.Uu.UpdateGroup(ctx, p)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed update ", err)
+		return
+	}
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(res, true, 0))
+}
+
+func (lc *AuthHandlerImpl) DelGroup(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+	id := c.Query("id")
+	if id == "" {
+		resp.GenerateBaseResponseWithError(c, "delete failed", pkg.NewErrorf(pkg.ErrorCodeInvalidArgument, "invalid id"))
+
+	}
+	p := pg.DeleteR2GroupParams{
+		ID:        utils.StrToInt32(id),
+		DeletedBy: nil}
+	value, _ := c.Get("nama")
+	p.DeletedBy = utils.StringPtr(value.(string))
+
+	err := lc.Uu.DeleteGroupById(ctx, p)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "delete failed", err)
+		return
+	}
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(id, true, 0))
+}
+
+func (lc *AuthHandlerImpl) ListUsers(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+
+	var req request.SearchUser
+
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(400, gin.H{"error": "Invalid query parameters"})
+		return
+	}
+
+	result, err := lc.Uu.ListUser(ctx, req)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed get data", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(result, true, 0))
+
+}
+
+func (lc *AuthHandlerImpl) UpdateUser(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+	id := c.Param("id")
+	var p request.UpdateUser
+	p.ID = uuid.Must(uuid.FromString(id))
+	err := c.ShouldBindJSON(&p)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed update", pkg.WrapErrorf(err, pkg.ErrorCodeInvalidArgument, "invalid json"))
+		return
+	}
+	value, _ := c.Get("nama")
+	p.UpdatedBy = utils.StringPtr(value.(string))
+
+	res, err := lc.Uu.UpdateUserPartial(ctx, p)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed update ", err)
+		return
+	}
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(res, true, 0))
+}
+
+func (lc *AuthHandlerImpl) UserById(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+	id := c.Param("id")
+	if id == "" {
+		resp.GenerateBaseResponseWithError(c, "detail failed", pkg.NewErrorf(pkg.ErrorCodeInvalidArgument, "invalid id"))
+
+	}
+
+	p := uuid.Must(uuid.FromString(id))
+
+	res, err := lc.Uu.GetUserId(ctx, p)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "detail failed", err)
+		return
+	}
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(res, true, 0))
+}
+
+func (lc *AuthHandlerImpl) UserRoleByUserId(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+	id := c.Param("id")
+	if id == "" {
+		resp.GenerateBaseResponseWithError(c, "detail failed", pkg.NewErrorf(pkg.ErrorCodeInvalidArgument, "invalid id"))
+
+	}
+
+	p := uuid.Must(uuid.FromString(id))
+
+	res, err := lc.Uu.GetUserRoleByUserId(ctx, p)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "detail failed", err)
+		return
+	}
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(res, true, 0))
+}
+
+func (lc *AuthHandlerImpl) ViewRoleId(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+	id := c.Param("id")
+	if id == "" {
+		resp.GenerateBaseResponseWithError(c, "detail failed", pkg.NewErrorf(pkg.ErrorCodeInvalidArgument, "invalid id"))
+
+	}
+
+	p := utils.StrToInt32(id)
+
+	res, err := lc.Uu.GetViewByRoleId(ctx, p)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "detail failed", err)
+		return
+	}
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(res, true, 0))
+}
+
+func (lc *AuthHandlerImpl) AddRolePolicyByRoleId(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+	id := c.Param("id")
+	var p request.UpdateRolePolicy
+	p.RoleID = utils.StrToInt32(id)
+	err := c.ShouldBindJSON(&p)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed update policy", pkg.WrapErrorf(err, pkg.ErrorCodeInvalidArgument, "invalid json"))
+		return
+	}
+	value, _ := c.Get("nama")
+	p.CreatedBy = utils.StringPtr(value.(string))
+
+	res, err := lc.Uu.AddRolePolicy(ctx, p)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed update policy", err)
+		return
+	}
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(res, true, 0))
+}

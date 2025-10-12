@@ -56,7 +56,19 @@ services:
       - "8108:8108"
     command: '--data-dir /data --api-key=wOk5BzIhew1eaSJf --enable-cors'
         
- 
+  keydb:
+    image: eqalpha/keydb
+    container_name: keyd-eklinik
+    command: keydb-server /opt/keydb/keydb.conf --server-threads 2
+    volumes:
+      - keydb-eklinik:/data:Z
+      - /home/aschenberg/pbn/keydb.conf:/opt/keydb/keydb.conf:Z
+    ports:
+      - 6380:6379
+    networks:
+      - e-klinik
+    restart: unless-stopped
+
   imagor:
     image: ghcr.io/cshum/imagor:latest
     container_name: imagor-e-klinik
@@ -107,3 +119,4 @@ volumes:
   imagor:
   minio_data_3:
   rabbitmq_eklinik:
+  keydb-eklinik:

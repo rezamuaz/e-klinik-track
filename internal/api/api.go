@@ -16,7 +16,7 @@ type Initialized struct {
 	MainHandler *handler.MainHandlerImpl
 }
 
-func NewApiRouter(cfg *config.Config, h *Initialized, cb *casbin.Enforcer) *pkg.Server {
+func NewApiRouter(cfg *config.Config, h *Initialized, cb *casbin.Enforcer, rdb *pkg.RedisCache) *pkg.Server {
 
 	// arangoC := pkg.NewArangoDatabase(cfg)
 	gin.SetMode(cfg.Server.RunMode)
@@ -35,7 +35,12 @@ func NewApiRouter(cfg *config.Config, h *Initialized, cb *casbin.Enforcer) *pkg.
 		router.Auth(auth, h.AuthHandler)
 		main := web.Group("/main")
 		main.Use(middleware.JwtAuth(cfg.JWT.AccessTokenSecret))
+		// main.Use(middleware.RbacAuthzMiddleware(cb, rdb))
 		router.Main(main, h.MainHandler)
+		rbac := web.Group("/rbac")
+		rbac.Use(middleware.JwtAuth(cfg.JWT.AccessTokenSecret))
+		router.Role(rbac, h.AuthHandler)
+
 	}
 
 	return &pkg.Server{Router: r}

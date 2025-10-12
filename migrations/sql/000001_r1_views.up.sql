@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS r1_views (
+    id INT GENERATED ALWAYS AS IDENTITY,
+    label VARCHAR(60) NOT NULL,
+    level SMALLINT,
+    parent_id INT,
+    path VARCHAR(255),
+    method VARCHAR(10),
+    resource_key VARCHAR(100) NOT NULL,
+    action VARCHAR(50) NOT NULL,
+    view VARCHAR(10),
+    data VARCHAR(10),
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    deleted_by VARCHAR,
+    deleted_at TIMESTAMPTZ,
+    updated_by VARCHAR,
+    updated_at TIMESTAMPTZ,
+    created_by VARCHAR,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    CONSTRAINT r1_views_pkey PRIMARY KEY (id),
+    CONSTRAINT unique_api_ukey UNIQUE (resource_key, action,type)
+);

@@ -3,7 +3,6 @@ CREATE TABLE IF NOT EXISTS public.users (
     nama TEXT NOT NULL,
     username TEXT NOT NULL,
     password TEXT NOT NULL,
-    role UUID NOT NULL,
     last_active TIMESTAMPTZ,
     is_active BOOLEAN NOT NULL DEFAULT true,
     locked_until TIMESTAMPTZ,

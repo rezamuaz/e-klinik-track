@@ -18,17 +18,19 @@ FROM kontrak k
 LEFT JOIN fasilitas_kesehatan f
   ON k.fasilitas_id = f.id
 WHERE k.deleted_at IS NULL
-  AND ($1::text IS NULL OR k.nama ILIKE '%' || $1 || '%')
-  AND ($2::boolean IS NULL OR k.is_active = $2::boolean)
-  AND ($3::text IS NULL OR f.nama ILIKE '%' || $3 || '%')
-  AND ($4::text IS NULL OR f.kab ILIKE '%' || $4 || '%')
-  AND ($5::text IS NULL OR f.propinsi ILIKE '%' || $5 || '%')
-  AND ($6::timestamptz IS NULL OR k.periode_mulai >= $6::timestamptz)
-  AND ($7::timestamptz IS NULL OR k.periode_selesai <= $7::timestamptz)
+  AND ($1::text IS NULL OR k.no_utama ILIKE '%' || $1 || '%')
+  AND ($2::text IS NULL OR k.no_ref ILIKE '%' || $2 || '%')
+  AND ($3::boolean IS NULL OR k.is_active = $3::boolean)
+  AND ($4::text IS NULL OR f.nama ILIKE '%' || $4 || '%')
+  AND ($5::text IS NULL OR f.kab ILIKE '%' || $5 || '%')
+  AND ($6::text IS NULL OR f.propinsi ILIKE '%' || $6 || '%')
+  AND ($7::timestamptz IS NULL OR k.periode_mulai >= $7::timestamptz)
+  AND ($8::timestamptz IS NULL OR k.periode_selesai <= $8::timestamptz)
 `
 
 type CountKontrakParams struct {
-	Nama              *string            `json:"nama"`
+	NoUtama           *string            `json:"no_utama"`
+	NoRef             *string            `json:"no_ref"`
 	IsActive          *bool              `json:"is_active"`
 	FasilitasNama     *string            `json:"fasilitas_nama"`
 	FasilitasKab      *string            `json:"fasilitas_kab"`
@@ -39,7 +41,8 @@ type CountKontrakParams struct {
 
 func (q *Queries) CountKontrak(ctx context.Context, arg CountKontrakParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countKontrak,
-		arg.Nama,
+		arg.NoUtama,
+		arg.NoRef,
 		arg.IsActive,
 		arg.FasilitasNama,
 		arg.FasilitasKab,
@@ -55,20 +58,22 @@ func (q *Queries) CountKontrak(ctx context.Context, arg CountKontrakParams) (int
 const createKontrak = `-- name: CreateKontrak :one
 INSERT INTO kontrak (
   fasilitas_id,
-  nama,
+  no_utama,
+  no_ref,
   periode_mulai,
   periode_selesai,
   durasi,
   deskripsi,
   created_by
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7
-) RETURNING id, fasilitas_id, nama, periode_mulai, periode_selesai, durasi, deskripsi, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at
+  $1, $2, $3, $4, $5, $6, $7, $8
+) RETURNING id, fasilitas_id, no_utama, no_ref, periode_mulai, periode_selesai, durasi, deskripsi, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at
 `
 
 type CreateKontrakParams struct {
 	FasilitasID    uuid.UUID          `json:"fasilitas_id"`
-	Nama           string             `json:"nama"`
+	NoUtama        string             `json:"no_utama"`
+	NoRef          string             `json:"no_ref"`
 	PeriodeMulai   pgtype.Timestamptz `json:"periode_mulai"`
 	PeriodeSelesai pgtype.Timestamptz `json:"periode_selesai"`
 	Durasi         pgtype.Interval    `json:"durasi"`
@@ -79,7 +84,8 @@ type CreateKontrakParams struct {
 func (q *Queries) CreateKontrak(ctx context.Context, arg CreateKontrakParams) (Kontrak, error) {
 	row := q.db.QueryRow(ctx, createKontrak,
 		arg.FasilitasID,
-		arg.Nama,
+		arg.NoUtama,
+		arg.NoRef,
 		arg.PeriodeMulai,
 		arg.PeriodeSelesai,
 		arg.Durasi,
@@ -90,7 +96,8 @@ func (q *Queries) CreateKontrak(ctx context.Context, arg CreateKontrakParams) (K
 	err := row.Scan(
 		&i.ID,
 		&i.FasilitasID,
-		&i.Nama,
+		&i.NoUtama,
+		&i.NoRef,
 		&i.PeriodeMulai,
 		&i.PeriodeSelesai,
 		&i.Durasi,
@@ -125,39 +132,123 @@ func (q *Queries) DeleteKontrak(ctx context.Context, arg DeleteKontrakParams) er
 	return err
 }
 
-const getKontrak = `-- name: GetKontrak :one
-SELECT id, fasilitas_id, nama, periode_mulai, periode_selesai, durasi, deskripsi, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at FROM kontrak
-WHERE id = $1
+const getKontrakByID = `-- name: GetKontrakByID :one
+SELECT 
+   k.id,
+  k.fasilitas_id,
+  k.no_utama,
+  k.no_ref,
+  k.periode_mulai,
+  k.periode_selesai,
+  k.durasi,
+  k.deskripsi,
+  k.is_active,
+  k.created_by,
+  k.created_at,
+  f.nama AS fasilitas_nama,
+  f.kab AS fasilitas_kab,
+  f.propinsi AS fasilitas_propinsi
+FROM kontrak k
+LEFT JOIN fasilitas_kesehatan f
+  ON k.fasilitas_id = f.id
+WHERE k.id = $1 AND k.deleted_at IS NULL
 `
 
-func (q *Queries) GetKontrak(ctx context.Context, id uuid.UUID) (Kontrak, error) {
-	row := q.db.QueryRow(ctx, getKontrak, id)
-	var i Kontrak
+type GetKontrakByIDRow struct {
+	ID                uuid.UUID          `json:"id"`
+	FasilitasID       uuid.UUID          `json:"fasilitas_id"`
+	NoUtama           string             `json:"no_utama"`
+	NoRef             string             `json:"no_ref"`
+	PeriodeMulai      pgtype.Timestamptz `json:"periode_mulai"`
+	PeriodeSelesai    pgtype.Timestamptz `json:"periode_selesai"`
+	Durasi            pgtype.Interval    `json:"durasi"`
+	Deskripsi         *string            `json:"deskripsi"`
+	IsActive          bool               `json:"is_active"`
+	CreatedBy         *string            `json:"created_by"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	FasilitasNama     *string            `json:"fasilitas_nama"`
+	FasilitasKab      *string            `json:"fasilitas_kab"`
+	FasilitasPropinsi *string            `json:"fasilitas_propinsi"`
+}
+
+func (q *Queries) GetKontrakByID(ctx context.Context, id uuid.UUID) (GetKontrakByIDRow, error) {
+	row := q.db.QueryRow(ctx, getKontrakByID, id)
+	var i GetKontrakByIDRow
 	err := row.Scan(
 		&i.ID,
 		&i.FasilitasID,
-		&i.Nama,
+		&i.NoUtama,
+		&i.NoRef,
 		&i.PeriodeMulai,
 		&i.PeriodeSelesai,
 		&i.Durasi,
 		&i.Deskripsi,
 		&i.IsActive,
-		&i.DeletedBy,
-		&i.DeletedAt,
-		&i.UpdatedNote,
-		&i.UpdatedBy,
-		&i.UpdatedAt,
 		&i.CreatedBy,
 		&i.CreatedAt,
+		&i.FasilitasNama,
+		&i.FasilitasKab,
+		&i.FasilitasPropinsi,
 	)
 	return i, err
+}
+
+const listAktifKontrak = `-- name: ListAktifKontrak :many
+SELECT
+  k.id,
+  k.fasilitas_id,
+  k.periode_mulai,
+  k.periode_selesai,
+  f.nama AS fasilitas_nama
+FROM kontrak k
+LEFT JOIN fasilitas_kesehatan f
+  ON k.fasilitas_id = f.id
+WHERE k.deleted_at IS NULL
+  AND ($1::text IS NULL OR f.nama ILIKE '%' || $1 || '%')
+  AND k.periode_selesai > NOW() + interval '7 days'
+ORDER BY f.nama ASC LIMIT 20 OFFSET 0
+`
+
+type ListAktifKontrakRow struct {
+	ID             uuid.UUID          `json:"id"`
+	FasilitasID    uuid.UUID          `json:"fasilitas_id"`
+	PeriodeMulai   pgtype.Timestamptz `json:"periode_mulai"`
+	PeriodeSelesai pgtype.Timestamptz `json:"periode_selesai"`
+	FasilitasNama  *string            `json:"fasilitas_nama"`
+}
+
+func (q *Queries) ListAktifKontrak(ctx context.Context, fasilitasNama *string) ([]ListAktifKontrakRow, error) {
+	rows, err := q.db.Query(ctx, listAktifKontrak, fasilitasNama)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAktifKontrakRow{}
+	for rows.Next() {
+		var i ListAktifKontrakRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.FasilitasID,
+			&i.PeriodeMulai,
+			&i.PeriodeSelesai,
+			&i.FasilitasNama,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listKontrak = `-- name: ListKontrak :many
 SELECT
   k.id,
   k.fasilitas_id,
-  k.nama,
+  k.no_utama,
+  k.no_ref,
   k.periode_mulai,
   k.periode_selesai,
   k.durasi,
@@ -172,28 +263,30 @@ FROM kontrak k
 LEFT JOIN fasilitas_kesehatan f
   ON k.fasilitas_id = f.id
 WHERE k.deleted_at IS NULL
-  AND ($1::text IS NULL OR k.nama ILIKE '%' || $1 || '%')
-  AND ($2::boolean IS NULL OR k.is_active = $2::boolean)
-  AND ($3::text IS NULL OR f.nama ILIKE '%' || $3 || '%')
-  AND ($4::text IS NULL OR f.kab ILIKE '%' || $4 || '%')
-  AND ($5::text IS NULL OR f.propinsi ILIKE '%' || $5 || '%')
-  AND ($6::timestamptz IS NULL OR k.periode_mulai >= $6::timestamptz)
-  AND ($7::timestamptz IS NULL OR k.periode_selesai <= $7::timestamptz)
+  AND ($1::text IS NULL OR k.no_utama ILIKE '%' || $1 || '%')
+  AND ($2::text IS NULL OR k.no_ref ILIKE '%' || $2 || '%')
+  AND ($3::boolean IS NULL OR k.is_active = $3::boolean)
+  AND ($4::text IS NULL OR f.nama ILIKE '%' || $4 || '%')
+  AND ($5::text IS NULL OR f.kab ILIKE '%' || $5 || '%')
+  AND ($6::text IS NULL OR f.propinsi ILIKE '%' || $6 || '%')
+  AND ($7::timestamptz IS NULL OR k.periode_mulai >= $7::timestamptz)
+  AND ($8::timestamptz IS NULL OR k.periode_selesai <= $8::timestamptz)
 ORDER BY
-  CASE WHEN $8::text = 'nama' AND $9::text = 'asc'  THEN k.nama END ASC,
-  CASE WHEN $8::text = 'nama' AND $9::text = 'desc' THEN k.nama END DESC,
-  CASE WHEN $8::text = 'created_at' AND $9::text = 'asc'  THEN k.created_at END ASC,
-  CASE WHEN $8::text = 'created_at' AND $9::text = 'desc' THEN k.created_at END DESC,
-  CASE WHEN $8::text = 'periode_mulai' AND $9::text = 'asc'  THEN k.periode_mulai END ASC,
-  CASE WHEN $8::text = 'periode_mulai' AND $9::text = 'desc' THEN k.periode_mulai END DESC,
-  CASE WHEN $8::text = 'periode_selesai' AND $9::text = 'asc'  THEN k.periode_selesai END ASC,
-  CASE WHEN $8::text = 'periode_selesai' AND $9::text = 'desc' THEN k.periode_selesai END DESC
-LIMIT $11
-OFFSET $10
+  CASE WHEN $9::text = 'no_utama' AND $10::text = 'asc'  THEN k.no_utama END ASC,
+  CASE WHEN $9::text = 'no_utama' AND $10::text = 'desc' THEN k.no_utama END DESC,
+  CASE WHEN $9::text = 'created_at' AND $10::text = 'asc'  THEN k.created_at END ASC,
+  CASE WHEN $9::text = 'created_at' AND $10::text = 'desc' THEN k.created_at END DESC,
+  CASE WHEN $9::text = 'periode_mulai' AND $10::text = 'asc'  THEN k.periode_mulai END ASC,
+  CASE WHEN $9::text = 'periode_mulai' AND $10::text = 'desc' THEN k.periode_mulai END DESC,
+  CASE WHEN $9::text = 'periode_selesai' AND $10::text = 'asc'  THEN k.periode_selesai END ASC,
+  CASE WHEN $9::text = 'periode_selesai' AND $10::text = 'desc' THEN k.periode_selesai END DESC
+LIMIT $12
+OFFSET $11
 `
 
 type ListKontrakParams struct {
-	Nama              *string            `json:"nama"`
+	NoUtama           *string            `json:"no_utama"`
+	NoRef             *string            `json:"no_ref"`
 	IsActive          *bool              `json:"is_active"`
 	FasilitasNama     *string            `json:"fasilitas_nama"`
 	FasilitasKab      *string            `json:"fasilitas_kab"`
@@ -209,7 +302,8 @@ type ListKontrakParams struct {
 type ListKontrakRow struct {
 	ID                uuid.UUID          `json:"id"`
 	FasilitasID       uuid.UUID          `json:"fasilitas_id"`
-	Nama              string             `json:"nama"`
+	NoUtama           string             `json:"no_utama"`
+	NoRef             string             `json:"no_ref"`
 	PeriodeMulai      pgtype.Timestamptz `json:"periode_mulai"`
 	PeriodeSelesai    pgtype.Timestamptz `json:"periode_selesai"`
 	Durasi            pgtype.Interval    `json:"durasi"`
@@ -224,7 +318,8 @@ type ListKontrakRow struct {
 
 func (q *Queries) ListKontrak(ctx context.Context, arg ListKontrakParams) ([]ListKontrakRow, error) {
 	rows, err := q.db.Query(ctx, listKontrak,
-		arg.Nama,
+		arg.NoUtama,
+		arg.NoRef,
 		arg.IsActive,
 		arg.FasilitasNama,
 		arg.FasilitasKab,
@@ -246,7 +341,8 @@ func (q *Queries) ListKontrak(ctx context.Context, arg ListKontrakParams) ([]Lis
 		if err := rows.Scan(
 			&i.ID,
 			&i.FasilitasID,
-			&i.Nama,
+			&i.NoUtama,
+			&i.NoRef,
 			&i.PeriodeMulai,
 			&i.PeriodeSelesai,
 			&i.Durasi,
@@ -271,22 +367,24 @@ func (q *Queries) ListKontrak(ctx context.Context, arg ListKontrakParams) ([]Lis
 const updateKontrakPartial = `-- name: UpdateKontrakPartial :one
 UPDATE kontrak
 SET
-  nama            = COALESCE($2, nama),
-  periode_mulai   = COALESCE($3, periode_mulai),
-  periode_selesai = COALESCE($4, periode_selesai),
-  durasi          = COALESCE($5, durasi),
-  deskripsi       = COALESCE($6, deskripsi),
-  is_active       = COALESCE($7, is_active),
-  updated_by      = COALESCE($8, updated_by),
-  updated_note    = COALESCE($9, updated_note),
+  no_utama            = COALESCE($2, no_utama),
+  no_ref            = COALESCE($3, no_ref),
+  periode_mulai   = COALESCE($4, periode_mulai),
+  periode_selesai = COALESCE($5, periode_selesai),
+  durasi          = COALESCE($6, durasi),
+  deskripsi       = COALESCE($7, deskripsi),
+  is_active       = COALESCE($8, is_active),
+  updated_by      = COALESCE($9, updated_by),
+  updated_note    = COALESCE($10, updated_note),
   updated_at      = now()
 WHERE id = $1
-RETURNING id, fasilitas_id, nama, periode_mulai, periode_selesai, durasi, deskripsi, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at
+RETURNING id, fasilitas_id, no_utama, no_ref, periode_mulai, periode_selesai, durasi, deskripsi, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at
 `
 
 type UpdateKontrakPartialParams struct {
 	ID             uuid.UUID          `json:"id"`
-	Nama           *string            `json:"nama"`
+	NoUtama        *string            `json:"no_utama"`
+	NoRef          *string            `json:"no_ref"`
 	PeriodeMulai   pgtype.Timestamptz `json:"periode_mulai"`
 	PeriodeSelesai pgtype.Timestamptz `json:"periode_selesai"`
 	Durasi         pgtype.Interval    `json:"durasi"`
@@ -299,7 +397,8 @@ type UpdateKontrakPartialParams struct {
 func (q *Queries) UpdateKontrakPartial(ctx context.Context, arg UpdateKontrakPartialParams) (Kontrak, error) {
 	row := q.db.QueryRow(ctx, updateKontrakPartial,
 		arg.ID,
-		arg.Nama,
+		arg.NoUtama,
+		arg.NoRef,
 		arg.PeriodeMulai,
 		arg.PeriodeSelesai,
 		arg.Durasi,
@@ -312,7 +411,8 @@ func (q *Queries) UpdateKontrakPartial(ctx context.Context, arg UpdateKontrakPar
 	err := row.Scan(
 		&i.ID,
 		&i.FasilitasID,
-		&i.Nama,
+		&i.NoUtama,
+		&i.NoRef,
 		&i.PeriodeMulai,
 		&i.PeriodeSelesai,
 		&i.Durasi,

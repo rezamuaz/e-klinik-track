@@ -1,45 +1,53 @@
 -- name: UsersFindByUsername :one
-SELECT u.id,
-       u.username,
-       u.password,
-	     u.nama,
-       ur.id  AS role_id,
-       ur.tag AS role 
-       FROM users u
-LEFT JOIN r4_user_roles ur ON ur.id = u.role
-WHERE u.username = $1;
+SELECT 
+    u.id,
+    u.username,
+    u.password,
+    u.nama,
+      COALESCE(
+        string_agg(ur.tag, ',' ORDER BY ur.tag), 
+        '' 
+    ) AS roles,
+    COALESCE(
+        string_agg(ur.id::text, ',' ORDER BY ur.id::text),
+        ''
+    ) AS role_ids
+FROM users u
+LEFT JOIN r5_user_roles uur ON uur.user_id = u.id AND uur.deleted_at IS NULL
+LEFT JOIN r4_roles ur ON ur.id = uur.role_id AND ur.deleted_at IS NULL
+WHERE u.username = $1
+  AND u.deleted_at IS NULL
+GROUP BY u.id, u.username, u.password, u.nama;
 
 -- name: UsersFindById :one
 SELECT u.id,
        u.username,
        u.password,
 	     u.nama,
-       u.refresh,
-       ur.id  AS role_id,
-       ur.tag AS role 
+       u.refresh
        FROM users u
-LEFT JOIN r4_user_roles ur ON ur.id = u.role
-WHERE u.id = $1;
+LEFT JOIN r5_user_roles uur ON uur.user_id = u.id AND uur.deleted_at IS NULL
+LEFT JOIN r4_roles ur ON ur.id = uur.role_id AND ur.deleted_at IS NULL
+WHERE u.id = $1
+  AND u.deleted_at IS NULL
+GROUP BY u.id, u.username, u.password, u.nama;
 
 -- name: ListUsers :many
 SELECT
   id,
   nama,
   username,
-  role,
   last_active,
   is_active,
   locked_until,
   failed_attempts,
   last_failed_at,
-  refresh,
   created_by,
   created_at
 FROM public.users
 WHERE deleted_at IS NULL
   AND (sqlc.narg('nama')::text IS NULL OR nama ILIKE '%' || sqlc.narg('nama') || '%')
   AND (sqlc.narg('username')::text IS NULL OR username ILIKE '%' || sqlc.narg('username') || '%')
-  AND (sqlc.narg('role')::uuid IS NULL OR role = sqlc.narg('role')::uuid)
   AND (sqlc.narg('is_active')::boolean IS NULL OR is_active = sqlc.narg('is_active')::boolean)
 ORDER BY
   CASE WHEN sqlc.narg('order_by')::text = 'nama' AND sqlc.narg('sort')::text = 'asc'  THEN nama END ASC,
@@ -57,7 +65,6 @@ FROM public.users
 WHERE deleted_at IS NULL
   AND (sqlc.narg('nama')::text IS NULL OR nama ILIKE '%' || sqlc.narg('nama') || '%')
   AND (sqlc.narg('username')::text IS NULL OR username ILIKE '%' || sqlc.narg('username') || '%')
-  AND (sqlc.narg('role')::uuid IS NULL OR role = sqlc.narg('role')::uuid)
   AND (sqlc.narg('is_active')::boolean IS NULL OR is_active = sqlc.narg('is_active')::boolean);
 
 
@@ -65,10 +72,9 @@ WHERE deleted_at IS NULL
 INSERT INTO users (
   nama,
   username,
-  password,
-  role
+  password
 ) VALUES (
-  @nama,@username,@password,@role
+  @nama,@username,@password
 ) ON CONFLICT (username) DO UPDATE SET 
 nama = @nama,
 password = @password
@@ -107,4 +113,25 @@ UPDATE users SET deleted_at = NOW() WHERE username = $1;
 -- name: DelUser :exec
 DELETE FROM users
 WHERE id = $1;
+
+
+-- name: GetUserDetail :one
+SELECT 
+  u.id,
+  u.nama,
+  u.username,
+  u.last_active,
+  u.is_active,
+  u.created_by,
+  u.created_at,
+  COALESCE(string_agg(DISTINCT ur.nama, ', '), '')::text AS roles
+FROM users u
+LEFT JOIN r5_user_roles uur 
+  ON uur.user_id = u.id 
+  AND uur.deleted_at IS NULL
+LEFT JOIN r4_roles ur 
+  ON ur.id = uur.role_id 
+  AND ur.deleted_at IS NULL
+WHERE u.id = $1
+GROUP BY u.id, u.nama, u.username, u.last_active, u.is_active, u.created_by, u.created_at;
 

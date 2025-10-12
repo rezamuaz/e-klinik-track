@@ -19,16 +19,18 @@ WHERE deleted_at IS NULL
   AND ($1::text IS NULL OR nama ILIKE '%' || $1 || '%')
   AND ($2::text IS NULL OR propinsi ILIKE '%' || $2 || '%')
   AND ($3::text IS NULL OR kab ILIKE '%' || $3 || '%')
-  AND ($4::boolean IS NULL OR is_active = $4::boolean)
-  AND ($5::text IS NULL OR tipe = $5::text)
+  AND ($4::uuid IS NULL OR kab_id = $4::uuid)
+  AND ($5::boolean IS NULL OR is_active = $5::boolean)
+  AND ($6::text IS NULL OR tipe = $6::text)
 `
 
 type CountFasilitasKesehatanParams struct {
-	Nama     *string `json:"nama"`
-	Propinsi *string `json:"propinsi"`
-	Kab      *string `json:"kab"`
-	IsActive *bool   `json:"is_active"`
-	Tipe     *string `json:"tipe"`
+	Nama     *string    `json:"nama"`
+	Propinsi *string    `json:"propinsi"`
+	Kab      *string    `json:"kab"`
+	KabID    *uuid.UUID `json:"kab_id"`
+	IsActive *bool      `json:"is_active"`
+	Tipe     *string    `json:"tipe"`
 }
 
 func (q *Queries) CountFasilitasKesehatan(ctx context.Context, arg CountFasilitasKesehatanParams) (int64, error) {
@@ -36,6 +38,7 @@ func (q *Queries) CountFasilitasKesehatan(ctx context.Context, arg CountFasilita
 		arg.Nama,
 		arg.Propinsi,
 		arg.Kab,
+		arg.KabID,
 		arg.IsActive,
 		arg.Tipe,
 	)
@@ -54,7 +57,7 @@ INSERT INTO fasilitas_kesehatan (
   $9, $10, $11, $12, $13,
   $14, $15, COALESCE($16, true), $17
 )
-RETURNING id, nama, propinsi, kab, alamat, thumbnail, telepon, pemilik, kelas, longitude, latitude, gmap_name, gmap_address, gmap_thumbnail, similarity, tipe, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at
+RETURNING id, nama, propinsi, propinsi_id, kab, kab_id, alamat, thumbnail, telepon, pemilik, kelas, longitude, latitude, gmap_name, gmap_address, gmap_thumbnail, similarity, tipe, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at
 `
 
 type CreateFasilitasKesehatanParams struct {
@@ -102,7 +105,9 @@ func (q *Queries) CreateFasilitasKesehatan(ctx context.Context, arg CreateFasili
 		&i.ID,
 		&i.Nama,
 		&i.Propinsi,
+		&i.PropinsiID,
 		&i.Kab,
+		&i.KabID,
 		&i.Alamat,
 		&i.Thumbnail,
 		&i.Telepon,
@@ -144,7 +149,7 @@ func (q *Queries) DeleteFasilitasKesehatan(ctx context.Context, arg DeleteFasili
 }
 
 const getFasilitasKesehatan = `-- name: GetFasilitasKesehatan :one
-SELECT id, nama, propinsi, kab, alamat, thumbnail, telepon, pemilik, kelas, longitude, latitude, gmap_name, gmap_address, gmap_thumbnail, similarity, tipe, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at FROM fasilitas_kesehatan
+SELECT id, nama, propinsi, propinsi_id, kab, kab_id, alamat, thumbnail, telepon, pemilik, kelas, longitude, latitude, gmap_name, gmap_address, gmap_thumbnail, similarity, tipe, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at FROM fasilitas_kesehatan
 WHERE id = $1 AND deleted_at IS NULL
 LIMIT 1
 `
@@ -156,7 +161,9 @@ func (q *Queries) GetFasilitasKesehatan(ctx context.Context, id uuid.UUID) (Fasi
 		&i.ID,
 		&i.Nama,
 		&i.Propinsi,
+		&i.PropinsiID,
 		&i.Kab,
+		&i.KabID,
 		&i.Alamat,
 		&i.Thumbnail,
 		&i.Telepon,
@@ -179,6 +186,91 @@ func (q *Queries) GetFasilitasKesehatan(ctx context.Context, id uuid.UUID) (Fasi
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const listDistinctKabupaten = `-- name: ListDistinctKabupaten :many
+SELECT id,nama
+FROM kabupaten
+WHERE ($3::text IS NULL OR nama ILIKE '%' || $3::text || '%')
+  AND ($4::uuid IS NULL OR propinsi_id = $4::uuid)
+ORDER BY nama ASC
+LIMIT $1 OFFSET $2
+`
+
+type ListDistinctKabupatenParams struct {
+	Limit      int32      `json:"limit"`
+	Offset     int32      `json:"offset"`
+	Nama       *string    `json:"nama"`
+	PropinsiID *uuid.UUID `json:"propinsi_id"`
+}
+
+type ListDistinctKabupatenRow struct {
+	ID   uuid.UUID `json:"id"`
+	Nama string    `json:"nama"`
+}
+
+func (q *Queries) ListDistinctKabupaten(ctx context.Context, arg ListDistinctKabupatenParams) ([]ListDistinctKabupatenRow, error) {
+	rows, err := q.db.Query(ctx, listDistinctKabupaten,
+		arg.Limit,
+		arg.Offset,
+		arg.Nama,
+		arg.PropinsiID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListDistinctKabupatenRow{}
+	for rows.Next() {
+		var i ListDistinctKabupatenRow
+		if err := rows.Scan(&i.ID, &i.Nama); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDistinctPropinsi = `-- name: ListDistinctPropinsi :many
+SELECT id,nama
+FROM propinsi
+WHERE ($3::text IS NULL OR nama ILIKE '%' || $3::text || '%')
+ORDER BY nama ASC
+LIMIT $1 OFFSET $2
+`
+
+type ListDistinctPropinsiParams struct {
+	Limit    int32   `json:"limit"`
+	Offset   int32   `json:"offset"`
+	Propinsi *string `json:"propinsi"`
+}
+
+type ListDistinctPropinsiRow struct {
+	ID   uuid.UUID `json:"id"`
+	Nama string    `json:"nama"`
+}
+
+func (q *Queries) ListDistinctPropinsi(ctx context.Context, arg ListDistinctPropinsiParams) ([]ListDistinctPropinsiRow, error) {
+	rows, err := q.db.Query(ctx, listDistinctPropinsi, arg.Limit, arg.Offset, arg.Propinsi)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListDistinctPropinsiRow{}
+	for rows.Next() {
+		var i ListDistinctPropinsiRow
+		if err := rows.Scan(&i.ID, &i.Nama); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listFasilitasKesehatan = `-- name: ListFasilitasKesehatan :many
@@ -206,28 +298,30 @@ FROM fasilitas_kesehatan
 WHERE deleted_at IS NULL
   AND ($1::text IS NULL OR nama ILIKE '%' || $1 || '%')
   AND ($2::text IS NULL OR propinsi ILIKE '%' || $2 || '%')
-  AND ($3::text IS NULL OR kab ILIKE '%' || $3 || '%')
-  AND ($4::boolean IS NULL OR is_active = $4::boolean)
-  AND ($5::text IS NULL OR tipe = $5::text)
+  AND ($3::uuid IS NULL OR kab_id = $3::uuid)
+  AND ($4::text IS NULL OR kab ILIKE '%' || $4 || '%')
+  AND ($5::boolean IS NULL OR is_active = $5::boolean)
+  AND ($6::text IS NULL OR tipe = $6::text)
 ORDER BY
-  CASE WHEN $6::text = 'nama' AND $7::text = 'asc'  THEN nama END ASC,
-  CASE WHEN $6::text = 'nama' AND $7::text = 'desc' THEN nama END DESC,
-  CASE WHEN $6::text = 'created_at' AND $7::text = 'asc'  THEN created_at END ASC,
-  CASE WHEN $6::text = 'created_at' AND $7::text = 'desc' THEN created_at END DESC
-LIMIT $9
-OFFSET $8
+  CASE WHEN $7::text = 'nama' AND $8::text = 'asc'  THEN nama END ASC,
+  CASE WHEN $7::text = 'nama' AND $8::text = 'desc' THEN nama END DESC,
+  CASE WHEN $7::text = 'created_at' AND $8::text = 'asc'  THEN created_at END ASC,
+  CASE WHEN $7::text = 'created_at' AND $8::text = 'desc' THEN created_at END DESC
+LIMIT $10
+OFFSET $9
 `
 
 type ListFasilitasKesehatanParams struct {
-	Nama     *string `json:"nama"`
-	Propinsi *string `json:"propinsi"`
-	Kab      *string `json:"kab"`
-	IsActive *bool   `json:"is_active"`
-	Tipe     *string `json:"tipe"`
-	OrderBy  *string `json:"order_by"`
-	Sort     *string `json:"sort"`
-	Offset   int32   `json:"offset"`
-	Limit    int32   `json:"limit"`
+	Nama     *string    `json:"nama"`
+	Propinsi *string    `json:"propinsi"`
+	KabID    *uuid.UUID `json:"kab_id"`
+	Kab      *string    `json:"kab"`
+	IsActive *bool      `json:"is_active"`
+	Tipe     *string    `json:"tipe"`
+	OrderBy  *string    `json:"order_by"`
+	Sort     *string    `json:"sort"`
+	Offset   int32      `json:"offset"`
+	Limit    int32      `json:"limit"`
 }
 
 type ListFasilitasKesehatanRow struct {
@@ -256,6 +350,7 @@ func (q *Queries) ListFasilitasKesehatan(ctx context.Context, arg ListFasilitasK
 	rows, err := q.db.Query(ctx, listFasilitasKesehatan,
 		arg.Nama,
 		arg.Propinsi,
+		arg.KabID,
 		arg.Kab,
 		arg.IsActive,
 		arg.Tipe,
@@ -325,7 +420,7 @@ SET
   updated_note   = COALESCE($19, updated_note),
   updated_at     = now()
 WHERE id = $1
-RETURNING id, nama, propinsi, kab, alamat, thumbnail, telepon, pemilik, kelas, longitude, latitude, gmap_name, gmap_address, gmap_thumbnail, similarity, tipe, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at
+RETURNING id, nama, propinsi, propinsi_id, kab, kab_id, alamat, thumbnail, telepon, pemilik, kelas, longitude, latitude, gmap_name, gmap_address, gmap_thumbnail, similarity, tipe, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at
 `
 
 type UpdateFasilitasKesehatanPartialParams struct {
@@ -377,7 +472,9 @@ func (q *Queries) UpdateFasilitasKesehatanPartial(ctx context.Context, arg Updat
 		&i.ID,
 		&i.Nama,
 		&i.Propinsi,
+		&i.PropinsiID,
 		&i.Kab,
+		&i.KabID,
 		&i.Alamat,
 		&i.Thumbnail,
 		&i.Telepon,
