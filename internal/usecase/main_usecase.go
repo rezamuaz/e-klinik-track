@@ -8,10 +8,13 @@ import (
 	"e-klinik/internal/domain/resp"
 	"e-klinik/pkg"
 	"e-klinik/utils"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/gofrs/uuid/v5"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jinzhu/copier"
 )
@@ -40,13 +43,17 @@ type MainUsecase interface {
 	ListKehadiran(c context.Context, arg request.SearchKehadiran) (any, error)
 	UpdateKehadiran(c context.Context, arg pg.UpdateKehadiranPartialParams) (any, error)
 	DeleteKehadiran(c context.Context, arg pg.DeleteKehadiranParams) error
-	AddSkpKehadiran(c context.Context, arg pg.CreateKehadiranSkpParams) (any, error)
+	SyncSkpKehadiran(c context.Context, arg pg.SyncKehadiranSkpParams) (any, error)
 	ListKehadiranSkp(c context.Context, arg request.SearchKehadiranSkp) (any, error)
 	UpdateKehadiranSkp(c context.Context, arg pg.UpdateKehadiranSkpParams) (any, error)
 	DeleteKehadiranSkp(c context.Context, arg pg.DeleteKehadiranSkpParams) error
 	ListPropinsi(c context.Context, arg request.SearchPropinsi) (any, error)
 	ListKabupaten(c context.Context, arg request.SearchKabupaten) (any, error)
 	ListIntervensi(c context.Context) (any, error)
+	ListRuanganByKontrak(c context.Context, arg request.SearchRuanganByKontrak) (any, error)
+	GetUsersByRoles(c context.Context, arg []int32) (any, error)
+	CheckKehadiran(c context.Context, arg uuid.UUID) (any, error)
+	SkpByKehadiranId(c context.Context, arg uuid.UUID) (any, error)
 }
 
 type MainUsecaseImpl struct {
@@ -337,6 +344,30 @@ func (mu *MainUsecaseImpl) ListRuangan(c context.Context, arg request.SearchRuan
 	return resp.WithPaginate(res, resp.CalculatePagination(arg.Page, arg.Limit, count)), nil
 }
 
+func (mu *MainUsecaseImpl) ListRuanganByKontrak(c context.Context, arg request.SearchRuanganByKontrak) (any, error) {
+	var params pg.GetRuanganBYKontrakParams
+	err := copier.Copy(&params, &arg)
+	if err != nil {
+		return nil, err
+	}
+
+	fid := uuid.FromStringOrNil(arg.FasilitasID)
+	params.FasilitasID = fid
+
+	kid := uuid.FromStringOrNil(arg.KontrakID)
+	params.KontrakID = kid
+
+	res, err := mu.db.GetRuanganBYKontrak(c, params)
+	if err != nil {
+		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get ruangan")
+	}
+	if len(res) == 0 {
+		return resp.WithPaginate([]string{}, nil), err
+	}
+
+	return resp.WithPaginate(res, nil), nil
+}
+
 func (mu *MainUsecaseImpl) UpdateRuangan(c context.Context, arg pg.UpdateRuanganPartialParams) (any, error) {
 	res, err := mu.db.UpdateRuanganPartial(c, arg)
 	if err != nil {
@@ -354,8 +385,22 @@ func (mu *MainUsecaseImpl) DeleteRuangan(c context.Context, arg pg.DeleteRuangan
 }
 
 func (mu *MainUsecaseImpl) AddKehadiran(c context.Context, arg pg.CreateKehadiranParams) (any, error) {
+	tgl, err := utils.GetJakartaDateObject()
+	if err != nil {
+		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get jakarta time")
+	}
+	arg.TglKehadiran = pgtype.Date{Valid: true, Time: tgl}
 	res, err := mu.db.CreateKehadiran(c, arg)
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return nil, pkg.WrapErrorf(err, pkg.ErrorCodeInvalidArgument, "Anda telah absen hari ini. Silakan coba lagi besok.")
+		}
+		if errors.Is(err, pgx.ErrNoRows) {
+			// Tidak ada row dikembalikan karena user sudah absen
+			return nil, pkg.NewErrorf(pkg.ErrorCodeInvalidArgument, "Anda telah absen hari ini. Silakan coba lagi besok.")
+		}
+
 		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed create kehadiran")
 	}
 	return res, nil
@@ -420,8 +465,9 @@ func (mu *MainUsecaseImpl) DeleteKehadiran(c context.Context, arg pg.DeleteKehad
 	return nil
 }
 
-func (mu *MainUsecaseImpl) AddSkpKehadiran(c context.Context, arg pg.CreateKehadiranSkpParams) (any, error) {
-	res, err := mu.db.CreateKehadiranSkp(c, arg)
+func (mu *MainUsecaseImpl) SyncSkpKehadiran(c context.Context, arg pg.SyncKehadiranSkpParams) (any, error) {
+
+	res, err := mu.db.SyncKehadiranSkp(c, arg)
 	if err != nil {
 		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed create kehadiran skp")
 	}
@@ -554,4 +600,49 @@ func (mu *MainUsecaseImpl) ListIntervensi(c context.Context) (any, error) {
 	}
 
 	return resp.WithPaginate(res, nil), nil
+}
+
+func (mu *MainUsecaseImpl) GetUsersByRoles(c context.Context, arg []int32) (any, error) {
+
+	// var err error
+	res, err := mu.db.GetUsersByRoles(c, arg)
+	if err != nil {
+		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get data")
+	}
+	if len(res) == 0 {
+		return resp.WithPaginate([]string{}, nil), err
+	}
+
+	return resp.WithPaginate(res, nil), nil
+
+}
+func (mu *MainUsecaseImpl) CheckKehadiran(c context.Context, arg uuid.UUID) (any, error) {
+	res, err := mu.db.CheckKehadiran(c, arg)
+	if err != nil {
+		// Jika tidak ada hasil (no rows)
+		if errors.Is(err, pgx.ErrNoRows) {
+			// Kembalikan hasil kosong agar tidak error di API layer
+			return resp.WithPaginate(map[string]any{}, nil), nil
+		}
+
+		// Jika error lain, bungkus dengan error code internal
+		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get data")
+	}
+
+	return resp.WithPaginate(res, nil), nil
+}
+
+func (mu *MainUsecaseImpl) SkpByKehadiranId(c context.Context, arg uuid.UUID) (any, error) {
+
+	// var err error
+	res, err := mu.db.SkpKehadiranID(c, arg)
+	if err != nil {
+		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get data")
+	}
+	if len(res) == 0 {
+		return resp.WithPaginate([]string{}, nil), err
+	}
+
+	return resp.WithPaginate(res, nil), nil
+
 }

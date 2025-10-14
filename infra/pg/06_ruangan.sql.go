@@ -126,6 +126,47 @@ func (q *Queries) GetRuangan(ctx context.Context, id uuid.UUID) (Ruangan, error)
 	return i, err
 }
 
+const getRuanganBYKontrak = `-- name: GetRuanganBYKontrak :many
+SELECT
+    id,
+    nama_ruangan
+FROM public.ruangan
+WHERE
+    kontrak_id = $1 AND fasilitas_id = $2
+ORDER BY
+    nama_ruangan
+`
+
+type GetRuanganBYKontrakParams struct {
+	KontrakID   uuid.UUID `json:"kontrak_id"`
+	FasilitasID uuid.UUID `json:"fasilitas_id"`
+}
+
+type GetRuanganBYKontrakRow struct {
+	ID          uuid.UUID `json:"id"`
+	NamaRuangan string    `json:"nama_ruangan"`
+}
+
+func (q *Queries) GetRuanganBYKontrak(ctx context.Context, arg GetRuanganBYKontrakParams) ([]GetRuanganBYKontrakRow, error) {
+	rows, err := q.db.Query(ctx, getRuanganBYKontrak, arg.KontrakID, arg.FasilitasID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetRuanganBYKontrakRow{}
+	for rows.Next() {
+		var i GetRuanganBYKontrakRow
+		if err := rows.Scan(&i.ID, &i.NamaRuangan); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getRuanganById = `-- name: GetRuanganById :one
 SELECT
   r.id,

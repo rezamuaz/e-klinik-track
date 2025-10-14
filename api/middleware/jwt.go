@@ -28,7 +28,7 @@ func JwtAuth(secret string) gin.HandlerFunc {
 					return
 				}
 				c.Set("username", user.Username)
-				c.Set("Id", user.ID)
+				c.Set("Id", user.Subject)
 				c.Set("nama", user.Nama)
 				c.Next()
 				return

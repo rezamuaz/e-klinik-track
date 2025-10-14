@@ -49,7 +49,7 @@ func (lc *AuthHandlerImpl) Login(c *gin.Context) {
 
 	user, err := lc.Uu.LoginWithPassword(c, request.Username, request.Password)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, helper.GenerateBaseResponseWithAnyError(nil, false, helper.InternalError, err.Error()))
+		c.AbortWithStatusJSON(http.StatusNotFound, helper.GenerateBaseResponseWithAnyError(nil, false, helper.NotFoundError, err.Error()))
 		return
 	}
 
@@ -728,6 +728,42 @@ func (lc *AuthHandlerImpl) AddRolePolicyByRoleId(c *gin.Context) {
 	res, err := lc.Uu.AddRolePolicy(ctx, p)
 	if err != nil {
 		resp.GenerateBaseResponseWithError(c, "failed update policy", err)
+		return
+	}
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(res, true, 0))
+}
+
+func (lc *AuthHandlerImpl) CreateNewUser(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+	var p request.Register
+
+	err := c.ShouldBindJSON(&p)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed create user", pkg.WrapErrorf(err, pkg.ErrorCodeInvalidArgument, "invalid json"))
+		return
+	}
+	value, _ := c.Get("nama")
+	p.CreatedBy = utils.StringPtr(value.(string))
+
+	res, err := lc.Uu.RegisterWithPassword(ctx, p)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed create user", err)
+		return
+	}
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(res, true, 0))
+}
+
+func (lc *AuthHandlerImpl) GetViewUser(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+
+	value, _ := c.Get("Id")
+	id := uuid.Must(uuid.FromString(value.(string)))
+
+	res, err := lc.Uu.GetViewUser(ctx, id)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed get menu", err)
 		return
 	}
 	c.JSON(http.StatusOK, resp.GenerateBaseResponse(res, true, 0))

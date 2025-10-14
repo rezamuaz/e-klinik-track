@@ -1,11 +1,12 @@
 -- name: CreateKehadiran :one
 INSERT INTO kehadiran (
   fasilitas_id, kontrak_id, ruangan_id, pembimbing_id,user_id,mata_kuliah_id,
-  jadwal_dinas, created_by
+  jadwal_dinas, created_by, tgl_kehadiran
 ) VALUES (
   $1, $2, $3, $4,
-  $5,$6, $7,$8
+  $5,$6, $7,$8,$9
 )
+ON CONFLICT (user_id, tgl_kehadiran) DO NOTHING
 RETURNING *;
 
 -- name: GetKehadiran :one
@@ -69,3 +70,12 @@ RETURNING *;
 UPDATE kehadiran
 SET deleted_at = now(), deleted_by = $2
 WHERE id = $1 AND deleted_at IS NULL;
+
+-- name: CheckKehadiran :one
+SELECT id,created_at
+FROM kehadiran
+WHERE tgl_kehadiran = (
+    CURRENT_DATE AT TIME ZONE 'Asia/Jakarta'
+)
+AND user_id = sqlc.arg('user_id')
+AND is_active = TRUE;

@@ -12,6 +12,28 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const checkKehadiran = `-- name: CheckKehadiran :one
+SELECT id,created_at
+FROM kehadiran
+WHERE tgl_kehadiran = (
+    CURRENT_DATE AT TIME ZONE 'Asia/Jakarta'
+)
+AND user_id = $1
+AND is_active = TRUE
+`
+
+type CheckKehadiranRow struct {
+	ID        uuid.UUID          `json:"id"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) CheckKehadiran(ctx context.Context, userID uuid.UUID) (CheckKehadiranRow, error) {
+	row := q.db.QueryRow(ctx, checkKehadiran, userID)
+	var i CheckKehadiranRow
+	err := row.Scan(&i.ID, &i.CreatedAt)
+	return i, err
+}
+
 const countKehadiran = `-- name: CountKehadiran :one
 SELECT COUNT(*)::bigint
 FROM kehadiran
@@ -47,23 +69,25 @@ func (q *Queries) CountKehadiran(ctx context.Context, arg CountKehadiranParams) 
 const createKehadiran = `-- name: CreateKehadiran :one
 INSERT INTO kehadiran (
   fasilitas_id, kontrak_id, ruangan_id, pembimbing_id,user_id,mata_kuliah_id,
-  jadwal_dinas, created_by
+  jadwal_dinas, created_by, tgl_kehadiran
 ) VALUES (
   $1, $2, $3, $4,
-  $5,$6, $7,$8
+  $5,$6, $7,$8,$9
 )
-RETURNING id, fasilitas_id, kontrak_id, ruangan_id, mata_kuliah_id, pembimbing_id, jadwal_dinas, user_id, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at
+ON CONFLICT (user_id, tgl_kehadiran) DO NOTHING
+RETURNING id, fasilitas_id, kontrak_id, ruangan_id, mata_kuliah_id, pembimbing_id, jadwal_dinas, user_id, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, tgl_kehadiran, created_by, created_at
 `
 
 type CreateKehadiranParams struct {
-	FasilitasID  uuid.UUID `json:"fasilitas_id"`
-	KontrakID    uuid.UUID `json:"kontrak_id"`
-	RuanganID    uuid.UUID `json:"ruangan_id"`
-	PembimbingID uuid.UUID `json:"pembimbing_id"`
-	UserID       uuid.UUID `json:"user_id"`
-	MataKuliahID uuid.UUID `json:"mata_kuliah_id"`
-	JadwalDinas  *string   `json:"jadwal_dinas"`
-	CreatedBy    *string   `json:"created_by"`
+	FasilitasID  uuid.UUID   `json:"fasilitas_id"`
+	KontrakID    uuid.UUID   `json:"kontrak_id"`
+	RuanganID    uuid.UUID   `json:"ruangan_id"`
+	PembimbingID uuid.UUID   `json:"pembimbing_id"`
+	UserID       uuid.UUID   `json:"user_id"`
+	MataKuliahID uuid.UUID   `json:"mata_kuliah_id"`
+	JadwalDinas  *string     `json:"jadwal_dinas"`
+	CreatedBy    *string     `json:"created_by"`
+	TglKehadiran pgtype.Date `json:"tgl_kehadiran"`
 }
 
 func (q *Queries) CreateKehadiran(ctx context.Context, arg CreateKehadiranParams) (Kehadiran, error) {
@@ -76,6 +100,7 @@ func (q *Queries) CreateKehadiran(ctx context.Context, arg CreateKehadiranParams
 		arg.MataKuliahID,
 		arg.JadwalDinas,
 		arg.CreatedBy,
+		arg.TglKehadiran,
 	)
 	var i Kehadiran
 	err := row.Scan(
@@ -93,6 +118,7 @@ func (q *Queries) CreateKehadiran(ctx context.Context, arg CreateKehadiranParams
 		&i.UpdatedNote,
 		&i.UpdatedBy,
 		&i.UpdatedAt,
+		&i.TglKehadiran,
 		&i.CreatedBy,
 		&i.CreatedAt,
 	)
@@ -116,7 +142,7 @@ func (q *Queries) DeleteKehadiran(ctx context.Context, arg DeleteKehadiranParams
 }
 
 const getKehadiran = `-- name: GetKehadiran :one
-SELECT id, fasilitas_id, kontrak_id, ruangan_id, mata_kuliah_id, pembimbing_id, jadwal_dinas, user_id, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at FROM kehadiran
+SELECT id, fasilitas_id, kontrak_id, ruangan_id, mata_kuliah_id, pembimbing_id, jadwal_dinas, user_id, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, tgl_kehadiran, created_by, created_at FROM kehadiran
 WHERE id = $1 AND deleted_at IS NULL
 LIMIT 1
 `
@@ -139,6 +165,7 @@ func (q *Queries) GetKehadiran(ctx context.Context, id uuid.UUID) (Kehadiran, er
 		&i.UpdatedNote,
 		&i.UpdatedBy,
 		&i.UpdatedAt,
+		&i.TglKehadiran,
 		&i.CreatedBy,
 		&i.CreatedAt,
 	)
@@ -252,7 +279,7 @@ SET
   updated_note  = COALESCE($9, updated_note),
   updated_at    = now()
 WHERE id = $1
-RETURNING id, fasilitas_id, kontrak_id, ruangan_id, mata_kuliah_id, pembimbing_id, jadwal_dinas, user_id, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at
+RETURNING id, fasilitas_id, kontrak_id, ruangan_id, mata_kuliah_id, pembimbing_id, jadwal_dinas, user_id, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, tgl_kehadiran, created_by, created_at
 `
 
 type UpdateKehadiranPartialParams struct {
@@ -295,6 +322,7 @@ func (q *Queries) UpdateKehadiranPartial(ctx context.Context, arg UpdateKehadira
 		&i.UpdatedNote,
 		&i.UpdatedBy,
 		&i.UpdatedAt,
+		&i.TglKehadiran,
 		&i.CreatedBy,
 		&i.CreatedAt,
 	)

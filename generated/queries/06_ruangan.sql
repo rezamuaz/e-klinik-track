@@ -90,3 +90,15 @@ RETURNING *;
 UPDATE ruangan
 SET deleted_at = now(), deleted_by = $2
 WHERE id = $1 AND deleted_at IS NULL;
+
+
+
+-- name: GetRuanganBYKontrak :many
+SELECT
+    id,
+    nama_ruangan
+FROM public.ruangan
+WHERE
+    kontrak_id = $1 AND fasilitas_id = $2
+ORDER BY
+    nama_ruangan;

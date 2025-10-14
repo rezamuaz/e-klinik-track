@@ -4,14 +4,8 @@ SELECT
     u.username,
     u.password,
     u.nama,
-      COALESCE(
-        string_agg(ur.tag, ',' ORDER BY ur.tag), 
-        '' 
-    ) AS roles,
-    COALESCE(
-        string_agg(ur.id::text, ',' ORDER BY ur.id::text),
-        ''
-    ) AS role_ids
+    COALESCE(string_agg(DISTINCT ur.tag, ', '), '')::text AS role
+    
 FROM users u
 LEFT JOIN r5_user_roles uur ON uur.user_id = u.id AND uur.deleted_at IS NULL
 LEFT JOIN r4_roles ur ON ur.id = uur.role_id AND ur.deleted_at IS NULL
@@ -24,7 +18,8 @@ SELECT u.id,
        u.username,
        u.password,
 	     u.nama,
-       u.refresh
+       u.refresh,
+       COALESCE(string_agg(DISTINCT ur.tag, ', '), '')::text AS role
        FROM users u
 LEFT JOIN r5_user_roles uur ON uur.user_id = u.id AND uur.deleted_at IS NULL
 LEFT JOIN r4_roles ur ON ur.id = uur.role_id AND ur.deleted_at IS NULL
@@ -135,3 +130,20 @@ LEFT JOIN r4_roles ur
 WHERE u.id = $1
 GROUP BY u.id, u.nama, u.username, u.last_active, u.is_active, u.created_by, u.created_at;
 
+
+-- name: GetUsersByRoles :many
+SELECT 
+    u.id AS user_id,
+    u.nama AS nama_user,
+    r.role_id
+FROM 
+    public.users u
+JOIN 
+    public.r5_user_roles r 
+    ON u.id = r.user_id
+WHERE 
+    r.role_id = ANY(@role_ids::int[])
+    AND r.is_active = TRUE
+    AND u.is_active = TRUE
+ORDER BY 
+    u.nama;

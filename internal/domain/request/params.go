@@ -42,10 +42,11 @@ type Login struct {
 	Password string `json:"password"`
 }
 type Register struct {
-	Username string `json:"username"`
-	Nama     string `json:"nama"`
-	Password string `json:"password"`
-	Role     string `json:"role"`
+	Username  string   `json:"username"`
+	Nama      string   `json:"nama"`
+	Password  string   `json:"password"`
+	Role      []Option `json:"role"`
+	CreatedBy *string  `json:"created_by"`
 }
 
 type SearchMataKuliah struct {
@@ -110,6 +111,11 @@ type SearchRuangan struct {
 	Sort        *string `form:"sort" json:"sort"`
 	Offset      int32   `form:"offset" json:"offset"`
 	Limit       int32   `form:"limit" json:"limit"`
+}
+
+type SearchRuanganByKontrak struct {
+	FasilitasID string `form:"fasilitas_id" json:"fasilitas_id"`
+	KontrakID   string `form:"kontrak_id" json:"kontrak_id"`
 }
 
 type SearchKehadiran struct {

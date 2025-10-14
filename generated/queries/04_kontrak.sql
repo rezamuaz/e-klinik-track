@@ -25,9 +25,12 @@ SELECT
   k.is_active,
   k.created_by,
   k.created_at,
-  f.nama AS fasilitas_nama,
-  f.kab AS fasilitas_kab,
-  f.propinsi AS fasilitas_propinsi
+  f.id AS fasilitas_id,
+  f.nama AS fasilitas,
+  f.kab,
+  f.kab_id,
+  f.propinsi,
+  f.propinsi_id
 FROM kontrak k
 LEFT JOIN fasilitas_kesehatan f
   ON k.fasilitas_id = f.id

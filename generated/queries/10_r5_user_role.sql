@@ -39,3 +39,30 @@ JOIN r4_roles ur
 WHERE uur.user_id = $1
   AND uur.deleted_at IS NULL
   AND ur.deleted_at IS NULL;
+
+-- name: GetUserMenuViews :many
+SELECT DISTINCT
+    r1.id AS view_id,
+    r1.label AS view_label,
+    r1.view,
+    r1.resource_key,
+    r1.action
+FROM
+    r5_user_roles ur 
+JOIN
+    r4_roles r4 ON ur.role_id = r4.id
+JOIN
+    r3_view_roles r3 ON ur.role_id = r3.role_id
+JOIN
+    r1_views r1 ON r3.view_id = r1.id
+WHERE
+    ur.user_id = sqlc.arg('user_id')
+    
+    -- Filter View Murni
+    AND r1.view = 'view'
+    
+    -- Filter Status Aktif
+    AND ur.deleted_at IS NULL
+    AND r3.deleted_at IS NULL
+    AND r1.is_active = TRUE
+    AND r4.is_active = TRUE;

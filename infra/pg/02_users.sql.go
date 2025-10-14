@@ -217,6 +217,50 @@ func (q *Queries) GetUserDetail(ctx context.Context, id uuid.UUID) (GetUserDetai
 	return i, err
 }
 
+const getUsersByRoles = `-- name: GetUsersByRoles :many
+SELECT 
+    u.id AS user_id,
+    u.nama AS nama_user,
+    r.role_id
+FROM 
+    public.users u
+JOIN 
+    public.r5_user_roles r 
+    ON u.id = r.user_id
+WHERE 
+    r.role_id = ANY($1::int[])
+    AND r.is_active = TRUE
+    AND u.is_active = TRUE
+ORDER BY 
+    u.nama
+`
+
+type GetUsersByRolesRow struct {
+	UserID   uuid.UUID `json:"user_id"`
+	NamaUser string    `json:"nama_user"`
+	RoleID   int32     `json:"role_id"`
+}
+
+func (q *Queries) GetUsersByRoles(ctx context.Context, roleIds []int32) ([]GetUsersByRolesRow, error) {
+	rows, err := q.db.Query(ctx, getUsersByRoles, roleIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetUsersByRolesRow{}
+	for rows.Next() {
+		var i GetUsersByRolesRow
+		if err := rows.Scan(&i.UserID, &i.NamaUser, &i.RoleID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUsers = `-- name: ListUsers :many
 SELECT
   id,
@@ -371,7 +415,8 @@ SELECT u.id,
        u.username,
        u.password,
 	     u.nama,
-       u.refresh
+       u.refresh,
+       COALESCE(string_agg(DISTINCT ur.tag, ', '), '')::text AS role
        FROM users u
 LEFT JOIN r5_user_roles uur ON uur.user_id = u.id AND uur.deleted_at IS NULL
 LEFT JOIN r4_roles ur ON ur.id = uur.role_id AND ur.deleted_at IS NULL
@@ -386,6 +431,7 @@ type UsersFindByIdRow struct {
 	Password string    `json:"password"`
 	Nama     string    `json:"nama"`
 	Refresh  *string   `json:"refresh"`
+	Role     string    `json:"role"`
 }
 
 func (q *Queries) UsersFindById(ctx context.Context, id uuid.UUID) (UsersFindByIdRow, error) {
@@ -397,6 +443,7 @@ func (q *Queries) UsersFindById(ctx context.Context, id uuid.UUID) (UsersFindByI
 		&i.Password,
 		&i.Nama,
 		&i.Refresh,
+		&i.Role,
 	)
 	return i, err
 }
@@ -407,14 +454,8 @@ SELECT
     u.username,
     u.password,
     u.nama,
-      COALESCE(
-        string_agg(ur.tag, ',' ORDER BY ur.tag), 
-        '' 
-    ) AS roles,
-    COALESCE(
-        string_agg(ur.id::text, ',' ORDER BY ur.id::text),
-        ''
-    ) AS role_ids
+    COALESCE(string_agg(DISTINCT ur.tag, ', '), '')::text AS role
+    
 FROM users u
 LEFT JOIN r5_user_roles uur ON uur.user_id = u.id AND uur.deleted_at IS NULL
 LEFT JOIN r4_roles ur ON ur.id = uur.role_id AND ur.deleted_at IS NULL
@@ -424,12 +465,11 @@ GROUP BY u.id, u.username, u.password, u.nama
 `
 
 type UsersFindByUsernameRow struct {
-	ID       uuid.UUID   `json:"id"`
-	Username string      `json:"username"`
-	Password string      `json:"password"`
-	Nama     string      `json:"nama"`
-	Roles    interface{} `json:"roles"`
-	RoleIds  interface{} `json:"role_ids"`
+	ID       uuid.UUID `json:"id"`
+	Username string    `json:"username"`
+	Password string    `json:"password"`
+	Nama     string    `json:"nama"`
+	Role     string    `json:"role"`
 }
 
 func (q *Queries) UsersFindByUsername(ctx context.Context, username string) (UsersFindByUsernameRow, error) {
@@ -440,8 +480,7 @@ func (q *Queries) UsersFindByUsername(ctx context.Context, username string) (Use
 		&i.Username,
 		&i.Password,
 		&i.Nama,
-		&i.Roles,
-		&i.RoleIds,
+		&i.Role,
 	)
 	return i, err
 }

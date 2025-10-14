@@ -2,7 +2,6 @@ package pkg
 
 import (
 	"e-klinik/internal/domain/entity"
-	"e-klinik/utils"
 	"errors"
 	"fmt"
 	"log"
@@ -18,7 +17,7 @@ func CreateAccessToken(u entity.User, secret string, expiry int) (accessToken st
 	claims := &entity.JwtCustomClaims{
 		Username: u.Username,
 		Nama:     u.Nama,
-		Role:     utils.DerefString(u.Role),
+		Role:     u.Role,
 		Session:  u.Session,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    "e-klink-track",
@@ -41,7 +40,7 @@ func CreateRefreshToken(u entity.User, secret string, expiry int) (refreshToken 
 	claimsRefresh := &entity.JwtCustomRefreshClaims{
 		Username: u.Username,
 		Nama:     u.Nama,
-		Role:     utils.DerefString(u.Role),
+		Role:     u.Role,
 		Session:  u.Session,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    "e-klink-track",

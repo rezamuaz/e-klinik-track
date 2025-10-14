@@ -6,6 +6,8 @@ import (
 	"e-klinik/infra/pg"
 	"e-klinik/pkg"
 	"e-klinik/utils"
+	"strconv"
+	"strings"
 
 	"e-klinik/internal/domain/request"
 	"e-klinik/internal/domain/resp"
@@ -298,7 +300,8 @@ func (h *MainHandlerImpl) UpdateKontrak(c *gin.Context) {
 	defer cancel()
 
 	var p pg.UpdateKontrakPartialParams
-	p.ID = uuid.Must(uuid.FromString(c.Query("id")))
+
+	p.ID = uuid.Must(uuid.FromString(c.Param("id")))
 	err := c.ShouldBindJSON(&p)
 	if err != nil {
 		resp.GenerateBaseResponseWithError(c, "failed update kontrak", pkg.WrapErrorf(err, pkg.ErrorCodeInvalidArgument, "invalid json"))
@@ -469,7 +472,9 @@ func (h *MainHandlerImpl) CreateKehadiran(c *gin.Context) {
 		return
 	}
 	value, _ := c.Get("nama")
+	id, _ := c.Get("Id")
 	p.CreatedBy = utils.StringPtr(value.(string))
+	p.UserID = uuid.Must(uuid.FromString(id.(string)))
 
 	result, err := h.mainUsecase.AddKehadiran(ctx, p)
 	if err != nil {
@@ -545,20 +550,23 @@ func (h *MainHandlerImpl) DeleteKehadiran(c *gin.Context) {
 	c.JSON(http.StatusOK, resp.GenerateBaseResponse(id, true, 0))
 }
 
-func (h *MainHandlerImpl) CreateKehadiranSkp(c *gin.Context) {
+func (h *MainHandlerImpl) CreateSyncKehadiranSkp(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c, 5*time.Second)
 	defer cancel()
 
-	var p pg.CreateKehadiranSkpParams
+	var p pg.SyncKehadiranSkpParams
 	err := c.ShouldBindJSON(&p)
 	if err != nil {
 		resp.GenerateBaseResponseWithError(c, "failed created kehadiran", pkg.WrapErrorf(err, pkg.ErrorCodeInvalidArgument, "invalid json"))
 		return
 	}
 	value, _ := c.Get("nama")
-	p.CreatedBy = utils.StringPtr(value.(string))
+	p.Actor = value.(string)
 
-	result, err := h.mainUsecase.AddSkpKehadiran(ctx, p)
+	id, _ := c.Get("Id")
+	p.UserID = uuid.Must(uuid.FromString(id.(string)))
+
+	result, err := h.mainUsecase.SyncSkpKehadiran(ctx, p)
 	if err != nil {
 		resp.GenerateBaseResponseWithError(c, "failed created kehadiran", err)
 		return
@@ -680,6 +688,85 @@ func (h *MainHandlerImpl) ListIntervensi(c *gin.Context) {
 	result, err := h.mainUsecase.ListIntervensi(ctx)
 	if err != nil {
 		resp.GenerateBaseResponseWithError(c, "failed get intervensi", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(result, true, 0))
+
+}
+
+func (h *MainHandlerImpl) GetRuanganKontrak(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+
+	var req request.SearchRuanganByKontrak
+
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(400, gin.H{"error": "Invalid query parameters"})
+		return
+	}
+
+	result, err := h.mainUsecase.ListRuanganByKontrak(ctx, req)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed get ruangan", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(result, true, 0))
+
+}
+
+func (h *MainHandlerImpl) GetUsersByRoles(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+
+	raw := c.Query("role_ids")
+
+	// Ubah jadi slice []int32
+	var roleIDs []int32
+	for _, p := range strings.Split(raw, ",") {
+		if n, err := strconv.Atoi(strings.TrimSpace(p)); err == nil {
+			roleIDs = append(roleIDs, int32(n))
+		}
+	}
+
+	result, err := h.mainUsecase.GetUsersByRoles(ctx, roleIDs)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed get ruangan", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(result, true, 0))
+
+}
+
+func (h *MainHandlerImpl) CheckKehadiran(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+
+	value, _ := c.Get("Id")
+	id := uuid.Must(uuid.FromString(value.(string)))
+
+	result, err := h.mainUsecase.CheckKehadiran(ctx, id)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed get ruangan", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(result, true, 0))
+
+}
+
+func (h *MainHandlerImpl) SkpByKehadiranId(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+
+	raw := c.Query("kehadiran_id")
+	id := uuid.Must(uuid.FromString(raw))
+
+	result, err := h.mainUsecase.SkpByKehadiranId(ctx, id)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed get ruangan", err)
 		return
 	}
 

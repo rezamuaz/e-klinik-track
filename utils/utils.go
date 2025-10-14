@@ -266,3 +266,28 @@ func StringToTimestamptz(s *string) pgtype.Timestamptz {
 	}
 	return pgtype.Timestamptz{Time: t, Valid: true}
 }
+
+func GetJakartaDateObject() (time.Time, error) {
+	// 1. Muat zona waktu Jakarta
+	loc, err := time.LoadLocation("Asia/Jakarta")
+	if err != nil {
+		// Timezone 'Asia/Jakarta' seharusnya selalu tersedia
+		return time.Time{}, fmt.Errorf("failed to load timezone: %w", err)
+	}
+
+	// 2. Konversi waktu server saat ini ke zona waktu Jakarta
+	nowJakarta := time.Now().In(loc)
+
+	// 3. Ambil waktu awal hari (midnight) dari tanggal Jakarta tersebut.
+	// Ini memastikan kita hanya menyimpan komponen DATE, tanpa komponen waktu,
+	// yang paling cocok untuk kolom DATE.
+	tanggalJakarta := time.Date(
+		nowJakarta.Year(),
+		nowJakarta.Month(),
+		nowJakarta.Day(),
+		0, 0, 0, 0, // Set waktu ke 00:00:00.000
+		nowJakarta.Location(), // Pertahankan lokasi (Jakarta)
+	)
+
+	return tanggalJakarta, nil
+}

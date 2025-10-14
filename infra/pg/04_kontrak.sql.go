@@ -145,9 +145,12 @@ SELECT
   k.is_active,
   k.created_by,
   k.created_at,
-  f.nama AS fasilitas_nama,
-  f.kab AS fasilitas_kab,
-  f.propinsi AS fasilitas_propinsi
+  f.id AS fasilitas_id,
+  f.nama AS fasilitas,
+  f.kab,
+  f.kab_id,
+  f.propinsi,
+  f.propinsi_id
 FROM kontrak k
 LEFT JOIN fasilitas_kesehatan f
   ON k.fasilitas_id = f.id
@@ -155,20 +158,23 @@ WHERE k.id = $1 AND k.deleted_at IS NULL
 `
 
 type GetKontrakByIDRow struct {
-	ID                uuid.UUID          `json:"id"`
-	FasilitasID       uuid.UUID          `json:"fasilitas_id"`
-	NoUtama           string             `json:"no_utama"`
-	NoRef             string             `json:"no_ref"`
-	PeriodeMulai      pgtype.Timestamptz `json:"periode_mulai"`
-	PeriodeSelesai    pgtype.Timestamptz `json:"periode_selesai"`
-	Durasi            pgtype.Interval    `json:"durasi"`
-	Deskripsi         *string            `json:"deskripsi"`
-	IsActive          bool               `json:"is_active"`
-	CreatedBy         *string            `json:"created_by"`
-	CreatedAt         pgtype.Timestamptz `json:"created_at"`
-	FasilitasNama     *string            `json:"fasilitas_nama"`
-	FasilitasKab      *string            `json:"fasilitas_kab"`
-	FasilitasPropinsi *string            `json:"fasilitas_propinsi"`
+	ID             uuid.UUID          `json:"id"`
+	FasilitasID    uuid.UUID          `json:"fasilitas_id"`
+	NoUtama        string             `json:"no_utama"`
+	NoRef          string             `json:"no_ref"`
+	PeriodeMulai   pgtype.Timestamptz `json:"periode_mulai"`
+	PeriodeSelesai pgtype.Timestamptz `json:"periode_selesai"`
+	Durasi         pgtype.Interval    `json:"durasi"`
+	Deskripsi      *string            `json:"deskripsi"`
+	IsActive       bool               `json:"is_active"`
+	CreatedBy      *string            `json:"created_by"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	FasilitasID_2  *uuid.UUID         `json:"fasilitas_id_2"`
+	Fasilitas      *string            `json:"fasilitas"`
+	Kab            *string            `json:"kab"`
+	KabID          *uuid.UUID         `json:"kab_id"`
+	Propinsi       *string            `json:"propinsi"`
+	PropinsiID     *uuid.UUID         `json:"propinsi_id"`
 }
 
 func (q *Queries) GetKontrakByID(ctx context.Context, id uuid.UUID) (GetKontrakByIDRow, error) {
@@ -186,9 +192,12 @@ func (q *Queries) GetKontrakByID(ctx context.Context, id uuid.UUID) (GetKontrakB
 		&i.IsActive,
 		&i.CreatedBy,
 		&i.CreatedAt,
-		&i.FasilitasNama,
-		&i.FasilitasKab,
-		&i.FasilitasPropinsi,
+		&i.FasilitasID_2,
+		&i.Fasilitas,
+		&i.Kab,
+		&i.KabID,
+		&i.Propinsi,
+		&i.PropinsiID,
 	)
 	return i, err
 }

@@ -9,8 +9,10 @@ import (
 	"e-klinik/internal/domain/resp"
 	"e-klinik/pkg"
 	"e-klinik/utils"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/casbin/casbin/v2"
@@ -18,6 +20,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jinzhu/copier"
 	"github.com/matthewhartstonge/argon2"
+	"github.com/redis/go-redis/v9"
 )
 
 type UserUsecase interface {
@@ -48,6 +51,7 @@ type UserUsecase interface {
 	GetUserRoleByUserId(c context.Context, arg uuid.UUID) (any, error)
 	GetViewByRoleId(c context.Context, arg int32) (any, error)
 	AddRolePolicy(c context.Context, arg request.UpdateRolePolicy) (any, error)
+	GetViewUser(c context.Context, arg uuid.UUID) (any, error)
 }
 
 type UserUsecaseImpl struct {
@@ -75,8 +79,13 @@ func (uu *UserUsecaseImpl) LoginWithPassword(c context.Context, username string,
 	///TODO - Check Email & Password
 	res, err := uu.db.UsersFindByUsername(c, username)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// Tidak ada user → return empty response, error nil
+			return resp.LoginResponse{}, pkg.WrapErrorf(err, pkg.ErrorCodeNotFound, "user not found")
+		}
 		return resp.LoginResponse{}, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed login")
 	}
+
 	if res.Password == "" {
 		return resp.LoginResponse{}, pkg.WrapErrorf(err, pkg.ErrorCodeNotFound, "password empty")
 	}
@@ -96,8 +105,8 @@ func (uu *UserUsecaseImpl) LoginWithPassword(c context.Context, username string,
 		ID:       res.ID.String(),
 		Username: res.Username,
 		Nama:     res.Nama,
-		// Role:     res.Roles,
-		Session: session_id,
+		Role:     res.Role,
+		Session:  session_id,
 	}
 	//Generated Access Token
 	accessToken, accessExp, err := pkg.CreateAccessToken(
@@ -120,7 +129,16 @@ func (uu *UserUsecaseImpl) LoginWithPassword(c context.Context, username string,
 		return resp.LoginResponse{}, err
 	}
 
+	view, err := uu.db.GetUserMenuViews(c, res.ID)
+	if err != nil {
+		return resp.LoginResponse{}, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get menu")
+	}
+
 	expire := time.Duration(uu.cfg.JWT.AccessTokenExpireHour)*time.Minute - 1*time.Minute
+
+	redisKey := fmt.Sprintf("view:%d", res.ID)
+
+	uu.cache.SetWithTTL(c, redisKey, view, time.Duration(uu.cfg.JWT.AccessTokenExpireHour)*time.Minute)
 
 	uu.cache.SetWithTTL(c, session_id, session_id, expire)
 
@@ -128,14 +146,14 @@ func (uu *UserUsecaseImpl) LoginWithPassword(c context.Context, username string,
 		ID:      res.ID,
 		Refresh: &refreshToken,
 	}
-	uu.db.UpdateUserPartial(c, arg)
+	err = uu.db.UpdateUserPartial(c, arg)
 
 	return resp.LoginResponse{
 		User: resp.User{
-			ID:       res.ID.String(),
-			Username: res.Username,
-			Nama:     res.Nama,
-			// Role:        res.Role,
+			ID:          res.ID.String(),
+			Username:    res.Username,
+			Nama:        res.Nama,
+			Role:        res.Role,
 			AccessToken: accessToken,
 			Exp:         accessExp,
 		},
@@ -144,15 +162,15 @@ func (uu *UserUsecaseImpl) LoginWithPassword(c context.Context, username string,
 
 }
 
-func (uu *UserUsecaseImpl) RegisterWithPassword(c context.Context, u request.Register) (any, error) {
+func (uu *UserUsecaseImpl) RegisterWithPassword(c context.Context, arg request.Register) (any, error) {
 	return utils.WithTransactionResult(c, uu.pg.Pool, func(qtx *pg.Queries, tx pgx.Tx) (any, error) {
 		var err error
 		///TODO -  (maps recipe user ID to primary user ID)
 		// userid := pkg.NewUlid()
 		user := pg.CreateOrUpdateUserParams{
-			Username: u.Username,
-			Nama:     u.Nama,
-			Password: u.Password,
+			Username: arg.Username,
+			Nama:     arg.Nama,
+			Password: arg.Password,
 			// 	Role:     uuid.Must(uuid.FromString(u.Role)
 			// ),
 		}
@@ -165,6 +183,23 @@ func (uu *UserUsecaseImpl) RegisterWithPassword(c context.Context, u request.Reg
 		res, err := qtx.CreateOrUpdateUser(c, user)
 		if err != nil {
 			return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed register")
+		}
+
+		// 5️⃣ Tambahkan role baru di SQL + Casbin
+		for _, roleID := range arg.Role {
+			carg := pg.CreateUserRoleParams{
+				UserID:    res.ID,
+				RoleID:    utils.StrToInt32(roleID.Value),
+				CreatedBy: arg.CreatedBy,
+			}
+
+			if err := qtx.CreateUserRole(c, carg); err != nil {
+				return nil, fmt.Errorf("failed add role %s for user %s: %w", roleID.Value, res.ID, err)
+			}
+
+			if _, err := uu.cbn.AddRoleForUser(res.ID.String(), roleID.Value, "", "", "", ""); err != nil {
+				return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed add casbin role")
+			}
 		}
 
 		return res, nil
@@ -205,8 +240,8 @@ func (uu *UserUsecaseImpl) Refresh(c context.Context, refresh string) (any, erro
 		ID:       res.ID.String(),
 		Username: res.Username,
 		Nama:     res.Nama,
-		// Role:     res.Role,
-		Session: session_id,
+		Role:     res.Role,
+		Session:  session_id,
 	}
 
 	access, exp, err := pkg.CreateAccessToken(user,
@@ -216,11 +251,20 @@ func (uu *UserUsecaseImpl) Refresh(c context.Context, refresh string) (any, erro
 		return nil, err
 	}
 
+	view, err := uu.db.GetUserMenuViews(c, res.ID)
+	if err != nil {
+		return resp.LoginResponse{}, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get menu")
+	}
+
+	redisKey := fmt.Sprintf("view:%d", res.ID)
+
+	uu.cache.SetWithTTL(c, redisKey, view, time.Duration(uu.cfg.JWT.AccessTokenExpireHour)*time.Minute)
+
 	return resp.User{
-		ID:       res.ID.String(),
-		Username: res.Username,
-		Nama:     res.Nama,
-		// Role:        res.Role,
+		ID:          res.ID.String(),
+		Username:    res.Username,
+		Nama:        res.Nama,
+		Role:        res.Role,
 		AccessToken: access,
 		Exp:         exp,
 	}, nil
@@ -740,6 +784,41 @@ func (uu *UserUsecaseImpl) AddRolePolicy(c context.Context, arg request.UpdateRo
 			"removed_policies": len(removeList),
 		}, nil), nil
 	})
+}
+
+func (uu *UserUsecaseImpl) GetViewUser(c context.Context, arg uuid.UUID) (any, error) {
+
+	redisKey := fmt.Sprintf("view:%d", arg)
+
+	// 1️⃣ Cek Redis
+	val, err := uu.cache.Client.Get(c, redisKey).Result()
+	if err == nil {
+		// Redis ada → unmarshal JSON
+		var views []pg.GetUserMenuViewsRow
+		if err := json.Unmarshal([]byte(val), &views); err != nil {
+			log.Println("failed unmarshal cached JSON:", err)
+		} else {
+			return views, nil
+		}
+	} else if err != redis.Nil {
+		// Error Redis lain
+		log.Println("failed get from redis:", err)
+	}
+
+	// 2️⃣ Ambil dari DB
+	views, err := uu.db.GetUserMenuViews(c, arg)
+	if err != nil {
+		return nil, err
+	}
+
+	expire := time.Duration(uu.cfg.JWT.AccessTokenExpireHour)*time.Hour - 1*time.Minute
+	ok := uu.cache.SetWithTTL(c, redisKey, views, expire)
+	if !ok {
+		log.Println("failed set cache")
+	}
+
+	return views, nil
+
 }
 
 // ✅ Helper untuk pastikan policy punya 6 field (v0–v5)

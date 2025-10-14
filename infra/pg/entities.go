@@ -69,6 +69,7 @@ type Kehadiran struct {
 	UpdatedNote  *string            `json:"updated_note"`
 	UpdatedBy    *string            `json:"updated_by"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	TglKehadiran pgtype.Date        `json:"tgl_kehadiran"`
 	CreatedBy    *string            `json:"created_by"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 }
@@ -77,6 +78,7 @@ type KehadiranSkp struct {
 	ID              uuid.UUID          `json:"id"`
 	KehadiranID     uuid.UUID          `json:"kehadiran_id"`
 	SkpIntervensiID uuid.UUID          `json:"skp_intervensi_id"`
+	UserID          uuid.UUID          `json:"user_id"`
 	Status          *string            `json:"status"`
 	IsActive        bool               `json:"is_active"`
 	DeletedBy       *string            `json:"deleted_by"`

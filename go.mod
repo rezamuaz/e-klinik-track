@@ -99,6 +99,7 @@ require (
 	github.com/google/wire v0.6.0
 	github.com/gtoxlili/pgx-adapter v0.0.0-20250918022703-6c96ee94ac58
 	github.com/ilyakaznacheev/cleanenv v1.5.0
+	github.com/jackc/pgx v3.6.2+incompatible
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/kkrypt0nn/spaceflake v1.5.1
 	github.com/klauspost/compress v1.17.9 // indirect
