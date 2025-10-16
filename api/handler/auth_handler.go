@@ -41,7 +41,7 @@ func NewAuthHandler(Uu *usecase.UserUsecaseImpl, Mu *usecase.MainUsecaseImpl, cf
 func (lc *AuthHandlerImpl) Login(c *gin.Context) {
 	var request request.Login
 
-	err := c.ShouldBind(&request)
+	err := c.ShouldBindJSON(&request)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, helper.GenerateBaseResponseWithValidationError(nil, false, helper.ValidationError, err))
 		return
@@ -66,7 +66,7 @@ func (lc *AuthHandlerImpl) Login(c *gin.Context) {
 func (lc *AuthHandlerImpl) Register(c *gin.Context) {
 	var request request.Register
 
-	err := c.ShouldBind(&request)
+	err := c.ShouldBindJSON(&request)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, helper.GenerateBaseResponseWithValidationError(nil, false, helper.ValidationError, err))
 		return
@@ -84,18 +84,11 @@ func (lc *AuthHandlerImpl) Register(c *gin.Context) {
 
 func (lc *AuthHandlerImpl) Refresh(c *gin.Context) {
 	var request request.Refresh
-	err := c.ShouldBind(&request)
+	err := c.ShouldBindJSON(&request)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, helper.GenerateBaseResponseWithValidationError(nil, false, helper.ValidationError, err))
 		return
 	}
-
-	// cookie, err := c.Cookie("auth_token")
-	// if err != nil {
-	// 	c.AbortWithStatusJSON(http.StatusBadRequest, helper.GenerateBaseResponse(nil, false, helper.NotFoundError))
-	// 	return
-	// }
-	// token = cookie
 
 	user, err := lc.Uu.Refresh(c, request.RefreshToken)
 	if err != nil {
