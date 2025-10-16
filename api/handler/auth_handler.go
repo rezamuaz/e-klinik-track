@@ -90,9 +90,6 @@ func (lc *AuthHandlerImpl) Refresh(c *gin.Context) {
 		return
 	}
 
-	var token string
-	token = request.RefreshToken
-
 	// cookie, err := c.Cookie("auth_token")
 	// if err != nil {
 	// 	c.AbortWithStatusJSON(http.StatusBadRequest, helper.GenerateBaseResponse(nil, false, helper.NotFoundError))
@@ -100,7 +97,7 @@ func (lc *AuthHandlerImpl) Refresh(c *gin.Context) {
 	// }
 	// token = cookie
 
-	user, err := lc.Uu.Refresh(c, token)
+	user, err := lc.Uu.Refresh(c, request.RefreshToken)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, helper.GenerateBaseResponseWithAnyError(nil, false, helper.InternalError, err.Error()))
 		return
