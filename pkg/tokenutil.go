@@ -31,7 +31,7 @@ func CreateAccessToken(u entity.User, secret string, expiry int) (accessToken st
 	if err != nil {
 		return "", 0, err
 	}
-	return t, now.Unix(), err
+	return t, exp.Unix(), err
 }
 
 func CreateRefreshToken(u entity.User, secret string, expiry int) (refreshToken string, expire int64, err error) {
@@ -54,7 +54,7 @@ func CreateRefreshToken(u entity.User, secret string, expiry int) (refreshToken 
 	if err != nil {
 		return "", 0, err
 	}
-	return rt, now.Unix(), err
+	return rt, exp.Unix(), err
 }
 
 func IsAuthorized(requestToken string, secret string) (bool, error) {
