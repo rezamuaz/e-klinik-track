@@ -207,7 +207,7 @@ func (uu *UserUsecaseImpl) RegisterWithPassword(c context.Context, arg request.R
 
 func (uu *UserUsecaseImpl) Refresh(c context.Context, refresh string) (any, error) {
 
-	isAuthorize, err := pkg.IsAuthorized(refresh, uu.cfg.JWT.RefreshTokenSecret)
+	isAuthorize, _, err := pkg.IsAuthorized(refresh, uu.cfg.JWT.RefreshTokenSecret)
 	if err != nil {
 		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "checking auth failed")
 	}
@@ -272,7 +272,7 @@ func (uu *UserUsecaseImpl) Refresh(c context.Context, refresh string) (any, erro
 
 func (uu *UserUsecaseImpl) Logout(c context.Context, refresh string) (any, error) {
 
-	isAuthorize, err := pkg.IsAuthorized(refresh, uu.cfg.JWT.RefreshTokenSecret)
+	isAuthorize, _, err := pkg.IsAuthorized(refresh, uu.cfg.JWT.RefreshTokenSecret)
 	if err != nil {
 		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "checking auth failed")
 	}

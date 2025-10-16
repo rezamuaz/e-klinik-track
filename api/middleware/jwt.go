@@ -15,7 +15,7 @@ func JwtAuth(secret string) gin.HandlerFunc {
 		t := strings.Split(authHeader, " ")
 		if len(t) == 2 {
 			authToken := t[1]
-			authorized, err := pkg.IsAuthorized(authToken, secret)
+			authorized, _, err := pkg.IsAuthorized(authToken, secret)
 
 			if authorized {
 				user, err := pkg.ExtractClaimsFromToken(authToken, secret)
