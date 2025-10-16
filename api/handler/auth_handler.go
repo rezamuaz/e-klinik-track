@@ -53,13 +53,13 @@ func (lc *AuthHandlerImpl) Login(c *gin.Context) {
 		return
 	}
 
-	expUnix := int64(user.RefreshToken.Exp) // example UNIX timestamp
+	// expUnix := int64(user.RefreshToken.Exp) // example UNIX timestamp
 	// expTime := time.Unix(expUnix, 0)
 
-	c.SetCookie("auth_token", user.RefreshToken.Token, int(expUnix-time.Now().Unix()), "/", "localhost", true, // true in production with HTTPS
-		true)
+	// c.SetCookie("auth_token", user.RefreshToken.Token, int(expUnix-time.Now().Unix()), "/", "localhost", true, // true in production with HTTPS
+	// 	true)
 
-	c.JSON(http.StatusOK, helper.GenerateBaseResponse(user.User, true, helper.Success))
+	c.JSON(http.StatusOK, helper.GenerateBaseResponse(user, true, helper.Success))
 
 }
 
@@ -83,14 +83,24 @@ func (lc *AuthHandlerImpl) Register(c *gin.Context) {
 }
 
 func (lc *AuthHandlerImpl) Refresh(c *gin.Context) {
-
-	cookie, err := c.Cookie("auth_token")
+	var request request.Refresh
+	err := c.ShouldBind(&request)
 	if err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, helper.GenerateBaseResponse(nil, false, helper.NotFoundError))
+		c.AbortWithStatusJSON(http.StatusBadRequest, helper.GenerateBaseResponseWithValidationError(nil, false, helper.ValidationError, err))
 		return
 	}
 
-	user, err := lc.Uu.Refresh(c, cookie)
+	var token string
+	token = request.RefreshToken
+
+	// cookie, err := c.Cookie("auth_token")
+	// if err != nil {
+	// 	c.AbortWithStatusJSON(http.StatusBadRequest, helper.GenerateBaseResponse(nil, false, helper.NotFoundError))
+	// 	return
+	// }
+	// token = cookie
+
+	user, err := lc.Uu.Refresh(c, token)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, helper.GenerateBaseResponseWithAnyError(nil, false, helper.InternalError, err.Error()))
 		return

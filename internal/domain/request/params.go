@@ -192,3 +192,6 @@ type UpdateRolePolicy struct {
 	RoleID    int32   `json:"role_id"`
 	CreatedBy *string `json:"created_by"`
 }
+type Refresh struct {
+	RefreshToken string `json:"refreshToken"`
+}

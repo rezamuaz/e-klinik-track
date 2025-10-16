@@ -24,7 +24,7 @@ import (
 )
 
 type UserUsecase interface {
-	LoginWithPassword(c context.Context, username string, password string) (resp.LoginResponse, error)
+	LoginWithPassword(c context.Context, username string, password string) (resp.User, error)
 	Logout(c context.Context, refresh string) (any, error)
 	RegisterWithPassword(c context.Context, u request.Register) (any, error)
 	Refresh(c context.Context, refresh string) (any, error)
@@ -72,7 +72,7 @@ func NewUserUsecase(postgre *pkg.Postgres, cfg *config.Config, cache *pkg.RedisC
 	}
 }
 
-func (uu *UserUsecaseImpl) LoginWithPassword(c context.Context, username string, password string) (resp.LoginResponse, error) {
+func (uu *UserUsecaseImpl) LoginWithPassword(c context.Context, username string, password string) (resp.User, error) {
 
 	var err error
 
@@ -81,22 +81,22 @@ func (uu *UserUsecaseImpl) LoginWithPassword(c context.Context, username string,
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			// Tidak ada user → return empty response, error nil
-			return resp.LoginResponse{}, pkg.WrapErrorf(err, pkg.ErrorCodeNotFound, "user not found")
+			return resp.User{}, pkg.WrapErrorf(err, pkg.ErrorCodeNotFound, "user not found")
 		}
-		return resp.LoginResponse{}, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed login")
+		return resp.User{}, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed login")
 	}
 
 	if res.Password == "" {
-		return resp.LoginResponse{}, pkg.WrapErrorf(err, pkg.ErrorCodeNotFound, "password empty")
+		return resp.User{}, pkg.WrapErrorf(err, pkg.ErrorCodeNotFound, "password empty")
 	}
 	storeHash := []byte(res.Password)
 	bytePassword := []byte(password)
 	ok, err := argon2.VerifyEncoded(bytePassword, storeHash)
 	if err != nil {
-		return resp.LoginResponse{}, pkg.WrapErrorf(err, pkg.ErrorCodeNotFound, "verify password error")
+		return resp.User{}, pkg.WrapErrorf(err, pkg.ErrorCodeNotFound, "verify password error")
 	}
 	if !ok {
-		return resp.LoginResponse{}, pkg.WrapErrorf(err, pkg.ErrorCodeNotFound, "password invalid")
+		return resp.User{}, pkg.WrapErrorf(err, pkg.ErrorCodeNotFound, "password invalid")
 	}
 
 	session_id := pkg.NewUlid()
@@ -115,23 +115,23 @@ func (uu *UserUsecaseImpl) LoginWithPassword(c context.Context, username string,
 		uu.cfg.JWT.AccessTokenExpireHour)
 	if err != nil {
 		// uc.Log.Error(logging.JWT, logging.GenerateToken, err.Error(), nil)
-		return resp.LoginResponse{}, err
+		return resp.User{}, err
 	}
 	//remove session from refresh token
 	user.Session = ""
 	//Generated Refresh Token
-	refreshToken, refreshExp, err := pkg.CreateRefreshToken(
+	refreshToken, _, err := pkg.CreateRefreshToken(
 		user,
 		uu.cfg.JWT.RefreshTokenSecret,
 		uu.cfg.JWT.RefreshTokenExpireHour)
 	if err != nil {
 		// uc.Log.Error(logging.JWT, logging.GenerateToken, err.Error(), nil)
-		return resp.LoginResponse{}, err
+		return resp.User{}, err
 	}
 
 	view, err := uu.db.GetUserMenuViews(c, res.ID)
 	if err != nil {
-		return resp.LoginResponse{}, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get menu")
+		return resp.User{}, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get menu")
 	}
 
 	expire := time.Duration(uu.cfg.JWT.AccessTokenExpireHour)*time.Minute - 1*time.Minute
@@ -148,17 +148,16 @@ func (uu *UserUsecaseImpl) LoginWithPassword(c context.Context, username string,
 	}
 	err = uu.db.UpdateUserPartial(c, arg)
 
-	return resp.LoginResponse{
-		User: resp.User{
-			ID:          res.ID.String(),
-			Username:    res.Username,
-			Nama:        res.Nama,
-			Role:        res.Role,
-			AccessToken: accessToken,
-			Exp:         accessExp,
+	return resp.User{
+			ID:           res.ID.String(),
+			Username:     res.Username,
+			Nama:         res.Nama,
+			Role:         res.Role,
+			AccessToken:  accessToken,
+			RefreshToken: refreshToken,
+			Exp:          accessExp,
 		},
-		RefreshToken: resp.RefreshToken{Token: refreshToken, Exp: refreshExp},
-	}, nil
+		nil
 
 }
 
@@ -253,7 +252,7 @@ func (uu *UserUsecaseImpl) Refresh(c context.Context, refresh string) (any, erro
 
 	view, err := uu.db.GetUserMenuViews(c, res.ID)
 	if err != nil {
-		return resp.LoginResponse{}, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get menu")
+		return resp.User{}, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get menu")
 	}
 
 	redisKey := fmt.Sprintf("view:%d", res.ID)
@@ -261,12 +260,13 @@ func (uu *UserUsecaseImpl) Refresh(c context.Context, refresh string) (any, erro
 	uu.cache.SetWithTTL(c, redisKey, view, time.Duration(uu.cfg.JWT.AccessTokenExpireHour)*time.Minute)
 
 	return resp.User{
-		ID:          res.ID.String(),
-		Username:    res.Username,
-		Nama:        res.Nama,
-		Role:        res.Role,
-		AccessToken: access,
-		Exp:         exp,
+		ID:           res.ID.String(),
+		Username:     res.Username,
+		Nama:         res.Nama,
+		Role:         res.Role,
+		AccessToken:  access,
+		RefreshToken: utils.DerefString(res.Refresh),
+		Exp:          exp,
 	}, nil
 }
 
