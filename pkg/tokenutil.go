@@ -12,7 +12,7 @@ import (
 )
 
 func CreateAccessToken(u entity.User, secret string, expiry int) (accessToken string, expire int64, err error) {
-	now := time.Now()
+	now := time.Now().UTC()
 	exp := now.Add(time.Minute * time.Duration(expiry))
 	claims := &entity.JwtCustomClaims{
 		Username: u.Username,
@@ -35,7 +35,7 @@ func CreateAccessToken(u entity.User, secret string, expiry int) (accessToken st
 }
 
 func CreateRefreshToken(u entity.User, secret string, expiry int) (refreshToken string, expire int64, err error) {
-	now := time.Now()
+	now := time.Now().UTC()
 	exp := now.Add(time.Hour * time.Duration(expiry))
 	claimsRefresh := &entity.JwtCustomRefreshClaims{
 		Username: u.Username,
