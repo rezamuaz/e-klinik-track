@@ -28,7 +28,7 @@
 # # Jalankan binary
 # ENTRYPOINT ["/app/eklinik"]
 # Stage 1: Build
-FROM golang:1.24 AS build  # gunakan Debian-based, bukan Alpine
+FROM golang:1.24 AS build
 
 WORKDIR /app
 
