@@ -149,13 +149,13 @@ func (uu *UserUsecaseImpl) LoginWithPassword(c context.Context, username string,
 	err = uu.db.UpdateUserPartial(c, arg)
 
 	return resp.User{
-			ID:           res.ID.String(),
-			Username:     res.Username,
-			Nama:         res.Nama,
-			Role:         res.Role,
-			AccessToken:  accessToken,
-			RefreshToken: refreshToken,
-			Exp:          accessExp,
+			ID:                 res.ID.String(),
+			Username:           res.Username,
+			Nama:               res.Nama,
+			Role:               res.Role,
+			AccessToken:        accessToken,
+			RefreshToken:       refreshToken,
+			AccessTokenExpires: accessExp,
 		},
 		nil
 
@@ -260,13 +260,13 @@ func (uu *UserUsecaseImpl) Refresh(c context.Context, refresh string) (any, erro
 	uu.cache.SetWithTTL(c, redisKey, view, time.Duration(uu.cfg.JWT.AccessTokenExpireHour)*time.Minute)
 
 	return resp.User{
-		ID:           res.ID.String(),
-		Username:     res.Username,
-		Nama:         res.Nama,
-		Role:         res.Role,
-		AccessToken:  access,
-		RefreshToken: utils.DerefString(res.Refresh),
-		Exp:          exp,
+		ID:                 res.ID.String(),
+		Username:           res.Username,
+		Nama:               res.Nama,
+		Role:               res.Role,
+		AccessToken:        access,
+		RefreshToken:       utils.DerefString(res.Refresh),
+		AccessTokenExpires: exp,
 	}, nil
 }
 
