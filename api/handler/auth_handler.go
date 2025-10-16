@@ -102,13 +102,9 @@ func (lc *AuthHandlerImpl) Refresh(c *gin.Context) {
 
 func (lc *AuthHandlerImpl) Logout(c *gin.Context) {
 
-	cookie, err := c.Cookie("auth_token")
-	if err != nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, helper.GenerateBaseResponse(nil, false, helper.NotFoundError))
-		return
-	}
+	value, _ := c.Get("Id")
 
-	user, err := lc.Uu.Logout(c, cookie)
+	user, err := lc.Uu.Logout(c, value.(string))
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, helper.GenerateBaseResponseWithAnyError(nil, false, helper.InternalError, err.Error()))
 		return

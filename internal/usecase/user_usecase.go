@@ -270,22 +270,9 @@ func (uu *UserUsecaseImpl) Refresh(c context.Context, refresh string) (any, erro
 	}, nil
 }
 
-func (uu *UserUsecaseImpl) Logout(c context.Context, refresh string) (any, error) {
+func (uu *UserUsecaseImpl) Logout(c context.Context, id string) (any, error) {
 
-	isAuthorize, _, err := pkg.IsAuthorized(refresh, uu.cfg.JWT.RefreshTokenSecret)
-	if err != nil {
-		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "checking auth failed")
-	}
-
-	if !isAuthorize {
-		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeInvalidArgument, "UnAuthorize")
-	}
-	id, err := pkg.ExtractIDFromToken(refresh, uu.cfg.JWT.RefreshTokenSecret)
-	// 3. Convert string -> UUID safely
-	// userUUID, err := uuid.FromString(id)
-	// if err != nil {
-	// 	return nil, pkg.WrapErrorf(err, pkg.ErrorCodeInvalidArgument, "invalid UUID in token")
-	// }
+	var err error
 	err = uu.db.UpdateUserPartial(c, pg.UpdateUserPartialParams{ID: uuid.Must(uuid.FromString(id)), Refresh: utils.StringPtr(""), UpdatedNote: utils.StringPtr("logout")})
 	if err != nil {
 		return nil, err

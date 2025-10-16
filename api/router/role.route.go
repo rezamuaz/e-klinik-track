@@ -32,5 +32,6 @@ func Role(group *gin.RouterGroup, h *handler.AuthHandlerImpl) {
 	group.GET("/view_role/role/:id", h.ViewRoleId)
 	group.PUT("/policy/role/:id", h.AddRolePolicyByRoleId)
 	group.GET("/user_view", h.GetViewUser)
+	group.DELETE("/logout", h.Logout)
 
 }
