@@ -4,6 +4,7 @@ import (
 	"e-klinik/internal/domain/entity"
 	"errors"
 	"fmt"
+	"log"
 
 	"time"
 
@@ -58,6 +59,10 @@ func CreateRefreshToken(u entity.User, secret string, expiryHours int) (string, 
 	if err != nil {
 		return "", 0, err
 	}
+
+	// Debug log
+	log.Printf("[DEBUG] GenerateRefreshToken -> user: %s, now: %d, exp: %d, expiryHours: %d",
+		u.Username, now.Unix(), exp.Unix(), expiryHours)
 
 	return signed, exp.Unix(), nil
 }
