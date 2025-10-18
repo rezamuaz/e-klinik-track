@@ -123,6 +123,7 @@ jobs:
             podman build -t ${{ secrets.APP_NAME || 'api-server' }}:latest .
             podman run -d --name ${{ secrets.APP_NAME || 'api-server' }} \
               -p ${{ secrets.APP_PORT || '7777' }}:${{ secrets.APP_PORT || '7777' }} \
+              --network e-klinik-track_e-klinik \
               --env-file /home/deploy/.env \
               ${{ secrets.APP_NAME || 'api-server' }}:latest
 
