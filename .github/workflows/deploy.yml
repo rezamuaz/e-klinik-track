@@ -1,5 +1,4 @@
-name: Deploy Go API to AlmaLinux VPS (Podman Rootless)
-
+name: Deploy Go API to AlmaLinux VPS 
 on:
   push:
     branches: [ "main" ]
