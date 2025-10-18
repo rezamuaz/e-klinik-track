@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      IMAGE_NAME: ${{ secrets.IMAGE_NAME }}
+      IMAGE_NAME: ghcr.io/rezamuaz/e-klinik-track:latest
       VPS_HOST: ${{ secrets.VPS_HOST }}
       VPS_USER: ${{ secrets.VPS_USER }}
       ENV_FILE_CONTENT: ${{ secrets.ENV_FILE_CONTENT }}
