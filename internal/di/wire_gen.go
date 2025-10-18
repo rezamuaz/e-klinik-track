@@ -23,9 +23,9 @@ import (
 // InitServer is the injector entry po int.
 func Injector(cfg *config.Config, ch *amqp.Channel, pg *pkg.Postgres, cache *pkg.RedisCache, casbin2 *casbin.Enforcer) *pkg.Server {
 	userUsecaseImpl := usecase.NewUserUsecase(pg, cfg, cache, casbin2)
+	authHandlerImpl := handler.NewAuthHandler(userUsecaseImpl, cfg)
 	producerService := worker.NewQueueService(ch)
 	mainUsecaseImpl := usecase.NewMainUsecase(pg, producerService)
-	authHandlerImpl := handler.NewAuthHandler(userUsecaseImpl, mainUsecaseImpl, cfg)
 	mainHandlerImpl := handler.NewMainHandler(mainUsecaseImpl, cfg)
 	initialized := &api.Initialized{
 		AuthHandler: authHandlerImpl,

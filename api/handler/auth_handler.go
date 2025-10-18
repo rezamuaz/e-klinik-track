@@ -25,16 +25,15 @@ type AuthHandler interface {
 }
 
 type AuthHandlerImpl struct {
-	Uu  *usecase.UserUsecaseImpl
-	Mu  *usecase.MainUsecaseImpl
+	Uu *usecase.UserUsecaseImpl
+
 	Cfg *config.Config
 }
 
-func NewAuthHandler(Uu *usecase.UserUsecaseImpl, Mu *usecase.MainUsecaseImpl, cfg *config.Config) *AuthHandlerImpl {
+func NewAuthHandler(Uu *usecase.UserUsecaseImpl, cfg *config.Config) *AuthHandlerImpl {
 	return &AuthHandlerImpl{
 		Uu:  Uu,
 		Cfg: cfg,
-		Mu:  Mu,
 	}
 }
 

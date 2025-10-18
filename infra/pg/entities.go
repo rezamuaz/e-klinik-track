@@ -123,6 +123,20 @@ type MataKuliah struct {
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
+type PembimbingKlinik struct {
+	ID          uuid.UUID          `json:"id"`
+	FasilitasID *uuid.UUID         `json:"fasilitas_id"`
+	UserID      *uuid.UUID         `json:"user_id"`
+	IsActive    bool               `json:"is_active"`
+	DeletedBy   *string            `json:"deleted_by"`
+	DeletedAt   pgtype.Timestamptz `json:"deleted_at"`
+	UpdatedNote *string            `json:"updated_note"`
+	UpdatedBy   *string            `json:"updated_by"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	CreatedBy   *string            `json:"created_by"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
 type Propinsi struct {
 	ID          uuid.UUID          `json:"id"`
 	Nama        string             `json:"nama"`

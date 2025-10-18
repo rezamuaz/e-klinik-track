@@ -195,3 +195,9 @@ type UpdateRolePolicy struct {
 type Refresh struct {
 	RefreshToken string `json:"refreshToken"`
 }
+
+type SearchRekapKehadiranMahasiswa struct {
+	UserID   string `form:"user_id" json:"user_id"`
+	TglAwal  string `form:"tgl_awal" json:"tgl_awal"`
+	TglAkhir string `form:"tgl_akhir" json:"tgl_akhir"`
+}

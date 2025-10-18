@@ -576,7 +576,7 @@ func (h *MainHandlerImpl) CreateSyncKehadiranSkp(c *gin.Context) {
 
 }
 func (h *MainHandlerImpl) ListKehadiranSkp(c *gin.Context) {
-	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	ctx, cancel := context.WithTimeout(c, 10*time.Second)
 	defer cancel()
 
 	var req request.SearchKehadiranSkp

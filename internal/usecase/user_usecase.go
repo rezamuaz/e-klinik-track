@@ -25,12 +25,12 @@ import (
 
 type UserUsecase interface {
 	LoginWithPassword(c context.Context, username string, password string) (resp.User, error)
-	Logout(c context.Context, refresh string) (any, error)
-	RegisterWithPassword(c context.Context, u request.Register) (any, error)
+	Logout(c context.Context, id string) (any, error)
+	RegisterWithPassword(c context.Context, arg request.Register) (any, error)
 	Refresh(c context.Context, refresh string) (any, error)
 	AddRoleForUser(c context.Context, u pg.CreateUserRoleParams) (any, error)
 	AddMenu(c context.Context, arg pg.CreateR1ViewParams) (any, error)
-	ListMenu(c context.Context) (any, error)
+	ListMenu(c context.Context, arg request.SearchMenu) (any, error)
 	EditMenu(c context.Context, arg pg.UpdateR1ViewParams) (any, error)
 	DeleteMenu(c context.Context, arg pg.DeleteR1ViewParams) error
 	MenuById(c context.Context, arg int32) (any, error)
@@ -99,14 +99,14 @@ func (uu *UserUsecaseImpl) LoginWithPassword(c context.Context, username string,
 		return resp.User{}, pkg.WrapErrorf(err, pkg.ErrorCodeNotFound, "password invalid")
 	}
 
-	session_id := pkg.NewUlid()
+	sessionId := pkg.NewUlid()
 
 	user := entity.User{
 		ID:       res.ID.String(),
 		Username: res.Username,
 		Nama:     res.Nama,
 		Role:     res.Role,
-		Session:  session_id,
+		Session:  sessionId,
 	}
 	//Generated Access Token
 	accessToken, accessExp, err := pkg.CreateAccessToken(
@@ -140,7 +140,7 @@ func (uu *UserUsecaseImpl) LoginWithPassword(c context.Context, username string,
 
 	uu.cache.SetWithTTL(c, redisKey, view, time.Duration(uu.cfg.JWT.AccessTokenExpireHour)*time.Minute)
 
-	uu.cache.SetWithTTL(c, session_id, session_id, expire)
+	uu.cache.SetWithTTL(c, sessionId, sessionId, expire)
 
 	arg := pg.UpdateUserPartialParams{
 		ID:      res.ID,
@@ -233,14 +233,14 @@ func (uu *UserUsecaseImpl) Refresh(c context.Context, refresh string) (any, erro
 		return nil, errors.New("token doesn't match")
 	}
 
-	session_id := pkg.NewUlid()
+	sessionId := pkg.NewUlid()
 
 	user := entity.User{
 		ID:       res.ID.String(),
 		Username: res.Username,
 		Nama:     res.Nama,
 		Role:     res.Role,
-		Session:  session_id,
+		Session:  sessionId,
 	}
 
 	access, exp, err := pkg.CreateAccessToken(user,

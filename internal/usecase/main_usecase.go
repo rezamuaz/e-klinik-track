@@ -646,3 +646,29 @@ func (mu *MainUsecaseImpl) SkpByKehadiranId(c context.Context, arg uuid.UUID) (a
 	return resp.WithPaginate(res, nil), nil
 
 }
+
+func (mu *MainUsecaseImpl) RekapKehadiranMahasiswa(c context.Context, arg request.SearchRekapKehadiranMahasiswa) (any, error) {
+
+	var params pg.RekapKehadiranMahasiswaParams
+	err := copier.Copy(&params, &arg)
+	if err != nil {
+		return nil, err
+	}
+
+	if arg.UserID != "" {
+		params.UserID = uuid.FromStringOrNil(arg.UserID)
+	}
+
+	var tglAwal pgtype.Date
+	tglAwal.Scan(arg.TglAwal)
+	var tglAkhir pgtype.Date
+	tglAkhir.Scan(arg.TglAkhir)
+	params.TglAwal = tglAwal
+	params.TglAkhir = tglAkhir
+
+	res, err := mu.db.RekapKehadiranMahasiswa(c, params)
+	if err != nil {
+		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get rekap kehadiran")
+	}
+	return resp.WithPaginate(res, nil), nil
+}
