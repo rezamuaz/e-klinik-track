@@ -1,4 +1,4 @@
-name: Deploy Go App (Build in VPS)
+name: Build & Deploy Go App to AlmaLinux VPS (Podman)
 
 on:
   push:
@@ -6,46 +6,93 @@ on:
       - main
 
 jobs:
-  deploy:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      # 1️⃣ Checkout source code
+      - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Deploy and build on VPS
+      # 2️⃣ Setup Go
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ secrets.GO_VERSION || '1.24' }}
+
+      # 3️⃣ Debug all secrets
+      - name: Debug all GitHub Secrets
+        run: |
+          echo "🔍 DEBUGGING ALL SECRETS"
+          echo "------------------------------------"
+          echo "VPS_HOST: ${{ secrets.VPS_HOST }}"
+          echo "VPS_USER: ${{ secrets.VPS_USER }}"
+          echo "APP_NAME: ${{ secrets.APP_NAME }}"
+          echo "APP_PORT: ${{ secrets.APP_PORT }}"
+          echo "GO_VERSION: ${{ secrets.GO_VERSION }}"
+          echo "TZ: ${{ secrets.TZ }}"
+          echo "------------------------------------"
+
+          # Periksa SSH Key
+          if [ -z "${{ secrets.VPS_SSH_KEY }}" ]; then
+            echo "❌ VPS_SSH_KEY is empty!"
+          else
+            echo "✅ VPS_SSH_KEY is loaded (hidden)"
+          fi
+
+          # Periksa ENV file
+          if [ -z "${{ secrets.ENV_FILE_CONTENT }}" ]; then
+            echo "❌ ENV_FILE_CONTENT is empty!"
+          else
+            echo "✅ ENV_FILE_CONTENT is loaded (hidden)"
+          fi
+
+          # Pastikan host & user tidak kosong
+          if [ -z "${{ secrets.VPS_HOST }}" ]; then
+            echo "❌ VPS_HOST is empty!"
+            exit 1
+          fi
+          if [ -z "${{ secrets.VPS_USER }}" ]; then
+            echo "❌ VPS_USER is empty!"
+            exit 1
+          fi
+          echo "✅ All essential secrets loaded successfully!"
+          echo "------------------------------------"
+
+      # 4️⃣ Build Go binary
+      - name: Build Go binary
+        run: |
+          echo "🏗️ Building Go app..."
+          go mod tidy
+          go build -o app cmd/main.go
+          ls -lh app
+
+      # 5️⃣ Deploy ke VPS (buat direktori & stop container lama)
+      - name: Prepare VPS via SSH
         uses: appleboy/ssh-action@v1.2.0
         with:
-          host: "http://207.180.243.192"
-          username: "deploy"
-          key: "authorized_keys"
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
           script: |
-            set -e
-            echo "🚀 Updating app on VPS..."
-
-            # Pastikan direktori ada
+            echo "🚀 Preparing VPS environment..."
             mkdir -p ~/app
-
-            # Clone kode terbaru dari GitHub (atau sync)
-            if [ -d ~/app/.git ]; then
-              cd ~/app && git pull origin main
-            else
-              git clone https://github.com/rezamuaz/e-klinik-track.git ~/app
-            fi
-
             cd ~/app
+            podman stop ${{ secrets.APP_NAME || 'api-server' }} || true
+            podman rm ${{ secrets.APP_NAME || 'api-server' }} || true
 
-            # Tulis file .env dari secret
-            echo "${{ secrets.ENV_FILE_CONTENT }}" > .env
+      # 6️⃣ Upload binary ke VPS
+      - name: Upload binary
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: "./app"
+          target: "~/app/app"
 
-            # Build image langsung di VPS
-            podman build -t e-klinik-track .
-
-            # Stop container lama (jika ada)
-            podman stop api-server || true
-            podman rm api-server || true
-
-            # Jalankan ulang container
-            podman run -d --name api-server --env-file .env -p 7777:7777 e-klinik-track
-
-            echo "✅ Deploy selesai di VPS!"
+      # 7️⃣ Jalankan container baru di VPS
+      - name: Run Podman container
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ se
