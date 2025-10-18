@@ -34,8 +34,8 @@ type ServerConfig struct {
 }
 
 type JWTConfig struct {
-	AccessTokenExpireHour  int    `env:"JWT_ACCESS_TOKEN_EXPIRY_HOUR"`
-	RefreshTokenExpireHour int    `env:"JWT_REFRESH_TOKEN_EXPIRY_HOUR"`
+	AccessTokenExpireHour  int    `env:"JWT_ACCESS_TOKEN_EXPIRY_HOUR" env-default:"5"`
+	RefreshTokenExpireHour int    `env:"JWT_REFRESH_TOKEN_EXPIRY_HOUR" env-default:"168"`
 	AccessTokenSecret      string `env:"JWT_ACCESS_TOKEN_SECRET"`
 	RefreshTokenSecret     string `env:"JWT_REFRESH_TOKEN_SECRET"`
 }
