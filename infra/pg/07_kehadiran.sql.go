@@ -69,13 +69,13 @@ func (q *Queries) CountKehadiran(ctx context.Context, arg CountKehadiranParams) 
 const createKehadiran = `-- name: CreateKehadiran :one
 INSERT INTO kehadiran (
   fasilitas_id, kontrak_id, ruangan_id, pembimbing_id,user_id,mata_kuliah_id,
-  jadwal_dinas, created_by, tgl_kehadiran
+  jadwal_dinas, created_by, tgl_kehadiran, presensi
 ) VALUES (
   $1, $2, $3, $4,
-  $5,$6, $7,$8,$9
+  $5,$6, $7,$8,$9,$10
 )
 ON CONFLICT (user_id, tgl_kehadiran) DO NOTHING
-RETURNING id, fasilitas_id, kontrak_id, ruangan_id, mata_kuliah_id, pembimbing_id, jadwal_dinas, user_id, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, tgl_kehadiran, created_by, created_at
+RETURNING id, fasilitas_id, kontrak_id, ruangan_id, mata_kuliah_id, pembimbing_id, jadwal_dinas, user_id, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, tgl_kehadiran, presensi, created_by, created_at
 `
 
 type CreateKehadiranParams struct {
@@ -88,6 +88,7 @@ type CreateKehadiranParams struct {
 	JadwalDinas  *string     `json:"jadwal_dinas"`
 	CreatedBy    *string     `json:"created_by"`
 	TglKehadiran pgtype.Date `json:"tgl_kehadiran"`
+	Presensi     string      `json:"presensi"`
 }
 
 func (q *Queries) CreateKehadiran(ctx context.Context, arg CreateKehadiranParams) (Kehadiran, error) {
@@ -101,6 +102,7 @@ func (q *Queries) CreateKehadiran(ctx context.Context, arg CreateKehadiranParams
 		arg.JadwalDinas,
 		arg.CreatedBy,
 		arg.TglKehadiran,
+		arg.Presensi,
 	)
 	var i Kehadiran
 	err := row.Scan(
@@ -119,6 +121,7 @@ func (q *Queries) CreateKehadiran(ctx context.Context, arg CreateKehadiranParams
 		&i.UpdatedBy,
 		&i.UpdatedAt,
 		&i.TglKehadiran,
+		&i.Presensi,
 		&i.CreatedBy,
 		&i.CreatedAt,
 	)
@@ -142,7 +145,7 @@ func (q *Queries) DeleteKehadiran(ctx context.Context, arg DeleteKehadiranParams
 }
 
 const getKehadiran = `-- name: GetKehadiran :one
-SELECT id, fasilitas_id, kontrak_id, ruangan_id, mata_kuliah_id, pembimbing_id, jadwal_dinas, user_id, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, tgl_kehadiran, created_by, created_at FROM kehadiran
+SELECT id, fasilitas_id, kontrak_id, ruangan_id, mata_kuliah_id, pembimbing_id, jadwal_dinas, user_id, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, tgl_kehadiran, presensi, created_by, created_at FROM kehadiran
 WHERE id = $1 AND deleted_at IS NULL
 LIMIT 1
 `
@@ -166,6 +169,7 @@ func (q *Queries) GetKehadiran(ctx context.Context, id uuid.UUID) (Kehadiran, er
 		&i.UpdatedBy,
 		&i.UpdatedAt,
 		&i.TglKehadiran,
+		&i.Presensi,
 		&i.CreatedBy,
 		&i.CreatedAt,
 	)
@@ -266,6 +270,99 @@ func (q *Queries) ListKehadiran(ctx context.Context, arg ListKehadiranParams) ([
 	return items, nil
 }
 
+const rekapKehadiranMahasiswa = `-- name: RekapKehadiranMahasiswa :one
+SELECT
+    user_id,
+    COUNT(*) FILTER (WHERE presensi = 'hadir') AS total_hadir,
+    COUNT(*) FILTER (WHERE presensi = 'izin') AS total_izin,
+    COUNT(*) FILTER (WHERE presensi = 'sakit') AS total_sakit,
+    COUNT(*) AS total_semua
+FROM kehadiran
+WHERE is_active = true
+  AND user_id = $1
+  AND tgl_kehadiran BETWEEN $2 AND $3
+GROUP BY user_id
+`
+
+type RekapKehadiranMahasiswaParams struct {
+	UserID   uuid.UUID   `json:"user_id"`
+	TglAwal  pgtype.Date `json:"tgl_awal"`
+	TglAkhir pgtype.Date `json:"tgl_akhir"`
+}
+
+type RekapKehadiranMahasiswaRow struct {
+	UserID     uuid.UUID `json:"user_id"`
+	TotalHadir int64     `json:"total_hadir"`
+	TotalIzin  int64     `json:"total_izin"`
+	TotalSakit int64     `json:"total_sakit"`
+	TotalSemua int64     `json:"total_semua"`
+}
+
+func (q *Queries) RekapKehadiranMahasiswa(ctx context.Context, arg RekapKehadiranMahasiswaParams) (RekapKehadiranMahasiswaRow, error) {
+	row := q.db.QueryRow(ctx, rekapKehadiranMahasiswa, arg.UserID, arg.TglAwal, arg.TglAkhir)
+	var i RekapKehadiranMahasiswaRow
+	err := row.Scan(
+		&i.UserID,
+		&i.TotalHadir,
+		&i.TotalIzin,
+		&i.TotalSakit,
+		&i.TotalSemua,
+	)
+	return i, err
+}
+
+const rekapKehadiranMahasiswaDetail = `-- name: RekapKehadiranMahasiswaDetail :many
+SELECT
+    tgl_kehadiran,
+    COUNT(*) FILTER (WHERE presensi = 'hadir') AS total_hadir,
+    COUNT(*) FILTER (WHERE presensi = 'izin') AS total_izin,
+    COUNT(*) FILTER (WHERE presensi = 'sakit') AS total_sakit
+FROM kehadiran
+WHERE is_active = true
+  AND user_id = $1
+  AND tgl_kehadiran BETWEEN $2 AND $3
+GROUP BY tgl_kehadiran
+ORDER BY tgl_kehadiran
+`
+
+type RekapKehadiranMahasiswaDetailParams struct {
+	UserID   uuid.UUID   `json:"user_id"`
+	TglAwal  pgtype.Date `json:"tgl_awal"`
+	TglAkhir pgtype.Date `json:"tgl_akhir"`
+}
+
+type RekapKehadiranMahasiswaDetailRow struct {
+	TglKehadiran pgtype.Date `json:"tgl_kehadiran"`
+	TotalHadir   int64       `json:"total_hadir"`
+	TotalIzin    int64       `json:"total_izin"`
+	TotalSakit   int64       `json:"total_sakit"`
+}
+
+func (q *Queries) RekapKehadiranMahasiswaDetail(ctx context.Context, arg RekapKehadiranMahasiswaDetailParams) ([]RekapKehadiranMahasiswaDetailRow, error) {
+	rows, err := q.db.Query(ctx, rekapKehadiranMahasiswaDetail, arg.UserID, arg.TglAwal, arg.TglAkhir)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RekapKehadiranMahasiswaDetailRow{}
+	for rows.Next() {
+		var i RekapKehadiranMahasiswaDetailRow
+		if err := rows.Scan(
+			&i.TglKehadiran,
+			&i.TotalHadir,
+			&i.TotalIzin,
+			&i.TotalSakit,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateKehadiranPartial = `-- name: UpdateKehadiranPartial :one
 UPDATE kehadiran
 SET
@@ -279,7 +376,7 @@ SET
   updated_note  = COALESCE($9, updated_note),
   updated_at    = now()
 WHERE id = $1
-RETURNING id, fasilitas_id, kontrak_id, ruangan_id, mata_kuliah_id, pembimbing_id, jadwal_dinas, user_id, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, tgl_kehadiran, created_by, created_at
+RETURNING id, fasilitas_id, kontrak_id, ruangan_id, mata_kuliah_id, pembimbing_id, jadwal_dinas, user_id, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, tgl_kehadiran, presensi, created_by, created_at
 `
 
 type UpdateKehadiranPartialParams struct {
@@ -323,6 +420,7 @@ func (q *Queries) UpdateKehadiranPartial(ctx context.Context, arg UpdateKehadira
 		&i.UpdatedBy,
 		&i.UpdatedAt,
 		&i.TglKehadiran,
+		&i.Presensi,
 		&i.CreatedBy,
 		&i.CreatedAt,
 	)

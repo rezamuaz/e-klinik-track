@@ -28,27 +28,53 @@
 # # Jalankan binary
 # ENTRYPOINT ["/app/eklinik"]
 # Stage 1: Build
-FROM golang:1.24 AS build
+# FROM golang:1.24 AS build
+
+# WORKDIR /app
+
+# COPY go.* ./
+# RUN go mod download
+
+# COPY . .
+
+# RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -o eklinik ./cmd
+
+# # Stage 2
+# FROM debian:bookworm-slim
+
+# WORKDIR /app
+# RUN apt-get update && apt-get install -y tzdata && rm -rf /var/lib/apt/lists/*
+
+# COPY --from=build /app/eklinik .
+# COPY --from=build /app/.env .
+
+# ENV TZ=Asia/Jakarta
+
+# ENTRYPOINT ["/app/eklinik"]
+
+# Build stage
+FROM golang:1.24 AS builder
 
 WORKDIR /app
-
-COPY go.* ./
+COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -o eklinik ./cmd
+# Build binary dari cmd/main.go
+RUN go build -o main ./cmd/main.go
 
-# Stage 2
-FROM debian:bookworm-slim
+# Runtime stage
+FROM golang:1.23
 
-WORKDIR /app
 RUN apt-get update && apt-get install -y tzdata && rm -rf /var/lib/apt/lists/*
 
-COPY --from=build /app/eklinik .
-COPY --from=build /app/.env .
+WORKDIR /app
+COPY --from=builder /app/main .
 
 ENV TZ=Asia/Jakarta
+EXPOSE 7777
 
-ENTRYPOINT ["/app/eklinik"]
+CMD ["./main"]
+
 

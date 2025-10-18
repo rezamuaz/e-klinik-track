@@ -1,0 +1,50 @@
+name: CI/CD Go API HTTP Port 7777
+
+on:
+  push:
+    branches: ["main"]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t ${{ secrets.IMAGE_NAME }} .
+
+      - name: Login GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Push image to GHCR
+        run: docker push ${{ secrets.IMAGE_NAME }}
+
+      - name: Deploy to VPS (Podman rootless)
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            # Upload .env ke VPS
+            echo "${{ secrets.ENV_FILE_CONTENT }}" > /home/deploy/.env
+            chmod 600 /home/deploy/.env
+
+            IMAGE=${{ secrets.IMAGE_NAME }}
+            podman pull $IMAGE
+            podman stop api-server || true
+            podman rm api-server || true
+            podman run -d --name api-server --replace \
+              -p 7777:7777 \
+              --env-file /home/deploy/.env \
+              $IMAGE
+
+            # Generate systemd service untuk auto-restart
+            podman generate systemd --name api-server --files --new
+            mkdir -p ~/.config/systemd/user
+            mv container-api-server.service ~/.config/systemd/user/
+            systemctl --user daemon-reload
+            systemctl --user enable --now container-api-server.service
+            loginctl enable-linger $(whoami)

@@ -1,10 +1,10 @@
 -- name: CreateKehadiran :one
 INSERT INTO kehadiran (
   fasilitas_id, kontrak_id, ruangan_id, pembimbing_id,user_id,mata_kuliah_id,
-  jadwal_dinas, created_by, tgl_kehadiran
+  jadwal_dinas, created_by, tgl_kehadiran, presensi
 ) VALUES (
   $1, $2, $3, $4,
-  $5,$6, $7,$8,$9
+  $5,$6, $7,$8,$9,$10
 )
 ON CONFLICT (user_id, tgl_kehadiran) DO NOTHING
 RETURNING *;
@@ -79,3 +79,30 @@ WHERE tgl_kehadiran = (
 )
 AND user_id = sqlc.arg('user_id')
 AND is_active = TRUE;
+
+-- name: RekapKehadiranMahasiswa :one
+SELECT
+    user_id,
+    COUNT(*) FILTER (WHERE presensi = 'hadir') AS total_hadir,
+    COUNT(*) FILTER (WHERE presensi = 'izin') AS total_izin,
+    COUNT(*) FILTER (WHERE presensi = 'sakit') AS total_sakit,
+    COUNT(*) AS total_semua
+FROM kehadiran
+WHERE is_active = true
+  AND user_id = sqlc.arg('user_id')
+  AND tgl_kehadiran BETWEEN sqlc.arg('tgl_awal') AND sqlc.arg('tgl_akhir')
+GROUP BY user_id;
+
+
+-- name: RekapKehadiranMahasiswaDetail :many
+SELECT
+    tgl_kehadiran,
+    COUNT(*) FILTER (WHERE presensi = 'hadir') AS total_hadir,
+    COUNT(*) FILTER (WHERE presensi = 'izin') AS total_izin,
+    COUNT(*) FILTER (WHERE presensi = 'sakit') AS total_sakit
+FROM kehadiran
+WHERE is_active = true
+  AND user_id = sqlc.arg('user_id')
+  AND tgl_kehadiran BETWEEN sqlc.arg('tgl_awal') AND sqlc.arg('tgl_akhir')
+GROUP BY tgl_kehadiran
+ORDER BY tgl_kehadiran;

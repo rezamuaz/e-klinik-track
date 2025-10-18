@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS kehadiran (
     updated_by VARCHAR,
     updated_at TIMESTAMPTZ,
     tgl_kehadiran DATE NOT NULL,
+    presensi VARCHAR NOT NULL DEFAULT 'hadir',
     created_by VARCHAR,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

@@ -70,6 +70,7 @@ type Kehadiran struct {
 	UpdatedBy    *string            `json:"updated_by"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 	TglKehadiran pgtype.Date        `json:"tgl_kehadiran"`
+	Presensi     string             `json:"presensi"`
 	CreatedBy    *string            `json:"created_by"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 }

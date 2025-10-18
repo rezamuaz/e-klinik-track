@@ -114,7 +114,7 @@ UNION ALL
 SELECT * FROM deleted;
 
 
--- name: SkpsKehadiranID :many
+-- name: SkpKehadiranID :many
 SELECT skp_intervensi_id
 FROM kehadiran_skp
 WHERE kehadiran_id = $1
