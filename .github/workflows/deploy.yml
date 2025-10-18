@@ -125,8 +125,6 @@ jobs:
             -p ${APP_PORT:-7777}:${APP_PORT:-7777} \
             -e APP_MODE="${APP_MODE}" \
             -e CONTEXT_TIMEOUT="${CONTEXT_TIMEOUT}" \
-            -e JWT_ACCESS_TOKEN_EXPIRY_HOUR="${JWT_ACCESS_TOKEN_EXPIRY_HOUR}" \
-            -e JWT_REFRESH_TOKEN_EXPIRY_HOUR="${JWT_REFRESH_TOKEN_EXPIRY_HOUR}" \
             -e JWT_SECRET="${JWT_SECRET}" \
             -e PG_USERNAME="${PG_USERNAME}" \
             -e PG_PASSWORD="${PG_PASSWORD}" \
