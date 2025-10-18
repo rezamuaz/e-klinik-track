@@ -1,7 +1,12 @@
-name: Deploy Go API to AlmaLinux VPS 
+name: Deploy Go API to AlmaLinux VPS (Podman Rootless)
+
 on:
   push:
     branches: [ "main" ]
+
+permissions:
+  contents: read
+  packages: write
 
 jobs:
   build-and-deploy:
@@ -11,51 +16,68 @@ jobs:
       IMAGE_NAME: ghcr.io/rezamuaz/e-klinik-track:latest
       VPS_HOST: ${{ secrets.VPS_HOST }}
       VPS_USER: ${{ secrets.VPS_USER }}
+      VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
       ENV_FILE_CONTENT: ${{ secrets.ENV_FILE_CONTENT }}
 
     steps:
+      # 1️⃣ Checkout kode
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Go
+      # 2️⃣ Setup Go versi 1.24
+      - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.24'
 
+      # 3️⃣ Build Docker image
       - name: Build Docker image
-        run: docker build -t $IMAGE_NAME .
+        run: |
+          docker build -t "$IMAGE_NAME" .
 
+      # 4️⃣ Login ke GitHub Container Registry (pakai PAT pribadi)
       - name: Login to GitHub Container Registry
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+        run: echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u rezamuaz --password-stdin
 
+      # 5️⃣ Push image ke GHCR
       - name: Push image to GHCR
-        run: docker push $IMAGE_NAME
+        run: docker push "$IMAGE_NAME"
 
+      # 6️⃣ Deploy ke VPS via SSH
       - name: Deploy to VPS via SSH
         uses: appleboy/ssh-action@v1.2.0
         with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
+          host: ${{ env.VPS_HOST }}
+          username: ${{ env.VPS_USER }}
+          key: ${{ env.VPS_SSH_KEY }}
           script: |
             set -e
 
+            echo "📦 Menulis file .env..."
             echo "${ENV_FILE_CONTENT}" > ~/.env
 
-            echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io -u ${{ github.actor }} --password-stdin
-            podman pull $IMAGE_NAME
+            echo "🔑 Login GHCR..."
+            echo "${{ secrets.GHCR_TOKEN }}" | podman login ghcr.io -u rezamuaz --password-stdin
 
+            echo "⬇️ Pull image baru..."
+            podman pull "$IMAGE_NAME"
+
+            echo "🛑 Hentikan container lama..."
             podman stop api-server || true
             podman rm api-server || true
 
+            echo "🚀 Jalankan container baru..."
             podman run -d \
               --name api-server \
               --env-file ~/.env \
               -p 7777:7777 \
-              $IMAGE_NAME
+              "$IMAGE_NAME"
 
+            echo "⚙️ Generate systemd agar auto-start..."
             podman generate systemd --name api-server --files --new
             mkdir -p ~/.config/systemd/user
             mv container-api-server.service ~/.config/systemd/user/
             systemctl --user daemon-reload
             systemctl --user enable --now container-api-server.service
+
+            echo "✅ Deploy selesai."
