@@ -122,32 +122,8 @@ jobs:
 
             podman build -t ${{ secrets.APP_NAME || 'api-server' }}:latest .
             podman run -d --name ${{ secrets.APP_NAME || 'api-server' }} \
-            -p ${{ secrets.APP_PORT || '7777' }}:${{ secrets.APP_PORT || '7777' }} \
-            -e APP_MODE=${{ secrets.APP_MODE }} \
-            -e CONTEXT_TIMEOUT=${{ secrets.CONTEXT_TIMEOUT }} \
-            -e JWT_ACCESS_TOKEN_EXPIRY_HOUR=${{ secrets.JWT_ACCESS_TOKEN_EXPIRY_HOUR }} \
-            -e JWT_REFRESH_TOKEN_EXPIRY_HOUR=${{ secrets.JWT_REFRESH_TOKEN_EXPIRY_HOUR }} \
-            -e JWT_SECRET=${{ secrets.JWT_SECRET }} \
-            -e PG_USERNAME=${{ secrets.PG_USERNAME }} \
-            -e PG_PASSWORD=${{ secrets.PG_PASSWORD }} \
-            -e PG_POOLMAX=${{ secrets.PG_POOLMAX }} \
-            -e PG_PORT=${{ secrets.PG_PORT }} \
-            -e PG_HOST=${{ secrets.PG_HOST }} \
-            -e PG_NAME=${{ secrets.PG_NAME }} \
-            -e PG_SSL=${{ secrets.PG_SSL }} \
-            -e REDIS_HOST=${{ secrets.REDIS_HOST }} \
-            -e REDIS_PORT=${{ secrets.REDIS_PORT }} \
-            -e REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }} \
-            -e REDIS_TIMEOUT=${{ secrets.REDIS_TIMEOUT }} \
-            -e RABBITMQ_USER=${{ secrets.RABBITMQ_USER }} \
-            -e RABBITMQ_PASSWORD=${{ secrets.RABBITMQ_PASSWORD }} \
-            -e RABBITMQ_HOST=${{ secrets.RABBITMQ_HOST }} \
-            -e RABBITMQ_PORT=${{ secrets.RABBITMQ_PORT }} \
-            -e TYPESENSE_HOST=${{ secrets.TYPESENSE_HOST }} \
-            -e TYPESENSE_PORT=${{ secrets.TYPESENSE_PORT }} \
-            -e TYPESENSE_API_KEY=${{ secrets.TYPESENSE_API_KEY }} \
-            -e MEILI_IMAGE_HOST=${{ secrets.MEILI_IMAGE_HOST }} \
-            ${{ secrets.APP_NAME || 'api-server' }}:latest
-      
+              -p ${{ secrets.APP_PORT || '7777' }}:${{ secrets.APP_PORT || '7777' }} \
+              --env-file /home/deploy/.env \
+              ${{ secrets.APP_NAME || 'api-server' }}:latest
 
             echo "✅ App is running on port ${{ secrets.APP_PORT || '7777' }}"
