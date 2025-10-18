@@ -1,50 +1,62 @@
-name: CI/CD Go API HTTP Port 7777
+name: Deploy Go API to AlmaLinux VPS (Podman Rootless)
 
 on:
   push:
-    branches: ["main"]
+    branches: [ "main" ]
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
 
+    env:
+      IMAGE_NAME: ${{ secrets.IMAGE_NAME }}
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+      ENV_FILE_CONTENT: ${{ secrets.ENV_FILE_CONTENT }}
+
     steps:
-      - name: Checkout repo
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build Docker image
-        run: docker build -t ${{ secrets.IMAGE_NAME }} .
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
 
-      - name: Login GHCR
+      - name: Build Docker image
+        run: docker build -t $IMAGE_NAME .
+
+      - name: Login to GitHub Container Registry
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
       - name: Push image to GHCR
-        run: docker push ${{ secrets.IMAGE_NAME }}
+        run: docker push $IMAGE_NAME
 
-      - name: Deploy to VPS (Podman rootless)
-        uses: appleboy/ssh-action@v0.1.10
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
-            # Upload .env ke VPS
-            echo "${{ secrets.ENV_FILE_CONTENT }}" > /home/deploy/.env
-            chmod 600 /home/deploy/.env
+            set -e
 
-            IMAGE=${{ secrets.IMAGE_NAME }}
-            podman pull $IMAGE
+            echo "${ENV_FILE_CONTENT}" > ~/.env
+
+            echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io -u ${{ github.actor }} --password-stdin
+            podman pull $IMAGE_NAME
+
             podman stop api-server || true
             podman rm api-server || true
-            podman run -d --name api-server --replace \
-              -p 7777:7777 \
-              --env-file /home/deploy/.env \
-              $IMAGE
 
-            # Generate systemd service untuk auto-restart
+            podman run -d \
+              --name api-server \
+              --env-file ~/.env \
+              -p 7777:7777 \
+              $IMAGE_NAME
+
             podman generate systemd --name api-server --files --new
             mkdir -p ~/.config/systemd/user
             mv container-api-server.service ~/.config/systemd/user/
             systemctl --user daemon-reload
             systemctl --user enable --now container-api-server.service
-            loginctl enable-linger $(whoami)
