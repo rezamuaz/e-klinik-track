@@ -122,3 +122,30 @@ WHERE kehadiran_id = $1
   AND deleted_at IS NULL
 ORDER BY created_at ASC;
 
+
+-- name: IntervensiKehadiranID :many
+SELECT
+ks.id,
+  si.nama, 
+  ks.skp_intervensi_id,
+  ks.locked
+FROM public.kehadiran_skp ks
+LEFT JOIN public.skp_intervensi si
+  ON ks.skp_intervensi_id = si.id
+WHERE 
+  ks.kehadiran_id = $1
+  AND ks.is_active = TRUE
+  AND ks.deleted_at IS NULL
+ORDER BY ks.created_at DESC;
+
+-- name: ApproveKehadiranSkpByIds :exec
+UPDATE public.kehadiran_skp
+SET
+  status = 'disetujui',
+  locked = TRUE,
+  updated_at = now(),
+  updated_by = $1 -- Parameter opsional untuk menyimpan siapa yang melakukan update (misalnya user_id atau username)
+WHERE
+  id = ANY (sqlc.arg('skp_kehadiran_id')::uuid[]) -- $1 adalah list UUID yang Anda masukkan
+  AND deleted_at IS NULL;
+

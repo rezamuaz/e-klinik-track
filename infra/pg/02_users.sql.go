@@ -13,22 +13,36 @@ import (
 )
 
 const countUsers = `-- name: CountUsers :one
-SELECT COUNT(*)::bigint
-FROM public.users
-WHERE deleted_at IS NULL
-  AND ($1::text IS NULL OR nama ILIKE '%' || $1 || '%')
-  AND ($2::text IS NULL OR username ILIKE '%' || $2 || '%')
-  AND ($3::boolean IS NULL OR is_active = $3::boolean)
+SELECT COUNT(DISTINCT u.id)::bigint
+FROM public.users u
+LEFT JOIN public.r5_user_roles ur
+  ON u.id = ur.user_id
+WHERE 
+  u.deleted_at IS NULL
+  AND ($1::text IS NULL OR u.nama ILIKE '%' || $1 || '%')
+  AND ($2::text IS NULL OR u.username ILIKE '%' || $2 || '%')
+  AND ($3::boolean IS NULL OR u.is_active = $3::boolean)
+  AND (
+    $4::int[] IS NULL 
+    OR array_length($4::int[], 1) IS NULL 
+    OR ur.role_id = ANY($4::int[])
+  )
 `
 
 type CountUsersParams struct {
 	Nama     *string `json:"nama"`
 	Username *string `json:"username"`
 	IsActive *bool   `json:"is_active"`
+	Roles    []int32 `json:"roles"`
 }
 
 func (q *Queries) CountUsers(ctx context.Context, arg CountUsersParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countUsers, arg.Nama, arg.Username, arg.IsActive)
+	row := q.db.QueryRow(ctx, countUsers,
+		arg.Nama,
+		arg.Username,
+		arg.IsActive,
+		arg.Roles,
+	)
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
@@ -263,36 +277,60 @@ func (q *Queries) GetUsersByRoles(ctx context.Context, roleIds []int32) ([]GetUs
 
 const listUsers = `-- name: ListUsers :many
 SELECT
-  id,
-  nama,
-  username,
-  last_active,
-  is_active,
-  locked_until,
-  failed_attempts,
-  last_failed_at,
-  created_by,
-  created_at
-FROM public.users
-WHERE deleted_at IS NULL
-  AND ($1::text IS NULL OR nama ILIKE '%' || $1 || '%')
-  AND ($2::text IS NULL OR username ILIKE '%' || $2 || '%')
-  AND ($3::boolean IS NULL OR is_active = $3::boolean)
+  u.id,
+  u.nama,
+  u.username,
+  u.last_active,
+  u.is_active,
+  u.locked_until,
+  u.failed_attempts,
+  u.last_failed_at,
+  u.created_by,
+  u.created_at,
+  COALESCE(string_agg(DISTINCT r.nama, ', '), '')::text AS roles,
+  COALESCE(string_agg(DISTINCT r.tag, ', '), '')::text AS tags
+FROM public.users u
+LEFT JOIN public.r5_user_roles ur
+  ON u.id = ur.user_id
+LEFT JOIN public.r4_roles r
+  ON ur.role_id = r.id    
+WHERE 
+  u.deleted_at IS NULL
+  AND ($1::text IS NULL OR u.nama ILIKE '%' || $1 || '%')
+  AND ($2::text IS NULL OR u.username ILIKE '%' || $2 || '%')
+  AND ($3::boolean IS NULL OR u.is_active = $3::boolean)
+  AND (
+    $4::int[] IS NULL 
+    OR array_length($4::int[], 1) IS NULL 
+    OR ur.role_id = ANY($4::int[])
+  )
+GROUP BY
+  u.id,
+  u.nama,
+  u.username,
+  u.last_active,
+  u.is_active,
+  u.locked_until,
+  u.failed_attempts,
+  u.last_failed_at,
+  u.created_by,
+  u.created_at
 ORDER BY
-  CASE WHEN $4::text = 'nama' AND $5::text = 'asc'  THEN nama END ASC,
-  CASE WHEN $4::text = 'nama' AND $5::text = 'desc' THEN nama END DESC,
-  CASE WHEN $4::text = 'username' AND $5::text = 'asc'  THEN username END ASC,
-  CASE WHEN $4::text = 'username' AND $5::text = 'desc' THEN username END DESC,
-  CASE WHEN $4::text = 'created_at' AND $5::text = 'asc'  THEN created_at END ASC,
-  CASE WHEN $4::text = 'created_at' AND $5::text = 'desc' THEN created_at END DESC
-LIMIT $7
-OFFSET $6
+  CASE WHEN $5::text = 'nama' AND $6::text = 'asc'  THEN u.nama END ASC,
+  CASE WHEN $5::text = 'nama' AND $6::text = 'desc' THEN u.nama END DESC,
+  CASE WHEN $5::text = 'username' AND $6::text = 'asc'  THEN u.username END ASC,
+  CASE WHEN $5::text = 'username' AND $6::text = 'desc' THEN u.username END DESC,
+  CASE WHEN $5::text = 'created_at' AND $6::text = 'asc'  THEN u.created_at END ASC,
+  CASE WHEN $5::text = 'created_at' AND $6::text = 'desc' THEN u.created_at END DESC
+LIMIT $8
+OFFSET $7
 `
 
 type ListUsersParams struct {
 	Nama     *string `json:"nama"`
 	Username *string `json:"username"`
 	IsActive *bool   `json:"is_active"`
+	Roles    []int32 `json:"roles"`
 	OrderBy  *string `json:"order_by"`
 	Sort     *string `json:"sort"`
 	Offset   int32   `json:"offset"`
@@ -310,6 +348,8 @@ type ListUsersRow struct {
 	LastFailedAt   pgtype.Timestamptz `json:"last_failed_at"`
 	CreatedBy      *string            `json:"created_by"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	Roles          string             `json:"roles"`
+	Tags           string             `json:"tags"`
 }
 
 func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]ListUsersRow, error) {
@@ -317,6 +357,7 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]ListUse
 		arg.Nama,
 		arg.Username,
 		arg.IsActive,
+		arg.Roles,
 		arg.OrderBy,
 		arg.Sort,
 		arg.Offset,
@@ -340,6 +381,8 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]ListUse
 			&i.LastFailedAt,
 			&i.CreatedBy,
 			&i.CreatedAt,
+			&i.Roles,
+			&i.Tags,
 		); err != nil {
 			return nil, err
 		}

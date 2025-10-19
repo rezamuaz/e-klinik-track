@@ -511,12 +511,19 @@ func (uu *UserUsecaseImpl) ListUser(c context.Context, arg request.SearchUser) (
 		arg.Page = 1
 	}
 	arg.Offset = utils.GetOffset(arg.Page, arg.Limit)
-
 	var params pg.ListUsersParams
-
 	err := copier.Copy(&params, &arg)
 	if err != nil {
 		return nil, err
+	}
+	if arg.Roles != "" {
+		intList, err := utils.StrToListInt32(arg.Roles)
+		if err != nil {
+			fmt.Println("Error:", err)
+			return nil, err
+		}
+		params.Roles = intList
+
 	}
 	res, err := uu.db.ListUsers(c, params)
 	if err != nil {

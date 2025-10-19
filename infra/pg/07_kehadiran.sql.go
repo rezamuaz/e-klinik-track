@@ -68,27 +68,28 @@ func (q *Queries) CountKehadiran(ctx context.Context, arg CountKehadiranParams) 
 
 const createKehadiran = `-- name: CreateKehadiran :one
 INSERT INTO kehadiran (
-  fasilitas_id, kontrak_id, ruangan_id, pembimbing_id,user_id,mata_kuliah_id,
+  fasilitas_id, kontrak_id, ruangan_id, pembimbing_id,user_id,pembimbing_klinik,mata_kuliah_id,
   jadwal_dinas, created_by, tgl_kehadiran, presensi
 ) VALUES (
   $1, $2, $3, $4,
-  $5,$6, $7,$8,$9,$10
+  $5,$6, $7,$8,$9,$10,$11
 )
 ON CONFLICT (user_id, tgl_kehadiran) DO NOTHING
-RETURNING id, fasilitas_id, kontrak_id, ruangan_id, mata_kuliah_id, pembimbing_id, jadwal_dinas, user_id, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, tgl_kehadiran, presensi, created_by, created_at
+RETURNING id, fasilitas_id, kontrak_id, ruangan_id, mata_kuliah_id, pembimbing_id, pembimbing_klinik, jadwal_dinas, user_id, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, tgl_kehadiran, presensi, status, created_by, created_at
 `
 
 type CreateKehadiranParams struct {
-	FasilitasID  uuid.UUID   `json:"fasilitas_id"`
-	KontrakID    uuid.UUID   `json:"kontrak_id"`
-	RuanganID    uuid.UUID   `json:"ruangan_id"`
-	PembimbingID uuid.UUID   `json:"pembimbing_id"`
-	UserID       uuid.UUID   `json:"user_id"`
-	MataKuliahID uuid.UUID   `json:"mata_kuliah_id"`
-	JadwalDinas  *string     `json:"jadwal_dinas"`
-	CreatedBy    *string     `json:"created_by"`
-	TglKehadiran pgtype.Date `json:"tgl_kehadiran"`
-	Presensi     string      `json:"presensi"`
+	FasilitasID      uuid.UUID   `json:"fasilitas_id"`
+	KontrakID        uuid.UUID   `json:"kontrak_id"`
+	RuanganID        uuid.UUID   `json:"ruangan_id"`
+	PembimbingID     uuid.UUID   `json:"pembimbing_id"`
+	UserID           uuid.UUID   `json:"user_id"`
+	PembimbingKlinik uuid.UUID   `json:"pembimbing_klinik"`
+	MataKuliahID     uuid.UUID   `json:"mata_kuliah_id"`
+	JadwalDinas      *string     `json:"jadwal_dinas"`
+	CreatedBy        *string     `json:"created_by"`
+	TglKehadiran     pgtype.Date `json:"tgl_kehadiran"`
+	Presensi         string      `json:"presensi"`
 }
 
 func (q *Queries) CreateKehadiran(ctx context.Context, arg CreateKehadiranParams) (Kehadiran, error) {
@@ -98,6 +99,7 @@ func (q *Queries) CreateKehadiran(ctx context.Context, arg CreateKehadiranParams
 		arg.RuanganID,
 		arg.PembimbingID,
 		arg.UserID,
+		arg.PembimbingKlinik,
 		arg.MataKuliahID,
 		arg.JadwalDinas,
 		arg.CreatedBy,
@@ -112,6 +114,7 @@ func (q *Queries) CreateKehadiran(ctx context.Context, arg CreateKehadiranParams
 		&i.RuanganID,
 		&i.MataKuliahID,
 		&i.PembimbingID,
+		&i.PembimbingKlinik,
 		&i.JadwalDinas,
 		&i.UserID,
 		&i.IsActive,
@@ -122,6 +125,7 @@ func (q *Queries) CreateKehadiran(ctx context.Context, arg CreateKehadiranParams
 		&i.UpdatedAt,
 		&i.TglKehadiran,
 		&i.Presensi,
+		&i.Status,
 		&i.CreatedBy,
 		&i.CreatedAt,
 	)
@@ -145,7 +149,7 @@ func (q *Queries) DeleteKehadiran(ctx context.Context, arg DeleteKehadiranParams
 }
 
 const getKehadiran = `-- name: GetKehadiran :one
-SELECT id, fasilitas_id, kontrak_id, ruangan_id, mata_kuliah_id, pembimbing_id, jadwal_dinas, user_id, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, tgl_kehadiran, presensi, created_by, created_at FROM kehadiran
+SELECT id, fasilitas_id, kontrak_id, ruangan_id, mata_kuliah_id, pembimbing_id, pembimbing_klinik, jadwal_dinas, user_id, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, tgl_kehadiran, presensi, status, created_by, created_at FROM kehadiran
 WHERE id = $1 AND deleted_at IS NULL
 LIMIT 1
 `
@@ -160,6 +164,7 @@ func (q *Queries) GetKehadiran(ctx context.Context, id uuid.UUID) (Kehadiran, er
 		&i.RuanganID,
 		&i.MataKuliahID,
 		&i.PembimbingID,
+		&i.PembimbingKlinik,
 		&i.JadwalDinas,
 		&i.UserID,
 		&i.IsActive,
@@ -170,10 +175,63 @@ func (q *Queries) GetKehadiran(ctx context.Context, id uuid.UUID) (Kehadiran, er
 		&i.UpdatedAt,
 		&i.TglKehadiran,
 		&i.Presensi,
+		&i.Status,
 		&i.CreatedBy,
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const getKehadiranByPembimbingUserId = `-- name: GetKehadiranByPembimbingUserId :many
+SELECT
+    k.id,
+    u.id AS user_id,
+    u.nama,
+    k.tgl_kehadiran
+FROM kehadiran k
+JOIN users u ON u.id = k.user_id
+WHERE k.is_active = true
+  AND ($1::uuid IS NULL OR k.pembimbing_klinik = $1::uuid)
+  AND ($2::uuid IS NULL OR k.user_id = $2::uuid)
+  AND k.status IS NULL
+ORDER BY k.tgl_kehadiran DESC
+`
+
+type GetKehadiranByPembimbingUserIdParams struct {
+	PembimbingKlinik *uuid.UUID `json:"pembimbing_klinik"`
+	UserID           *uuid.UUID `json:"user_id"`
+}
+
+type GetKehadiranByPembimbingUserIdRow struct {
+	ID           uuid.UUID   `json:"id"`
+	UserID       uuid.UUID   `json:"user_id"`
+	Nama         string      `json:"nama"`
+	TglKehadiran pgtype.Date `json:"tgl_kehadiran"`
+}
+
+func (q *Queries) GetKehadiranByPembimbingUserId(ctx context.Context, arg GetKehadiranByPembimbingUserIdParams) ([]GetKehadiranByPembimbingUserIdRow, error) {
+	rows, err := q.db.Query(ctx, getKehadiranByPembimbingUserId, arg.PembimbingKlinik, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetKehadiranByPembimbingUserIdRow{}
+	for rows.Next() {
+		var i GetKehadiranByPembimbingUserIdRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Nama,
+			&i.TglKehadiran,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listKehadiran = `-- name: ListKehadiran :many
@@ -372,11 +430,12 @@ SET
   pembimbing_id = COALESCE($5, pembimbing_id),
   jadwal_dinas  = COALESCE($6, jadwal_dinas),
   is_active     = COALESCE($7, is_active),
-  updated_by    = COALESCE($8, updated_by),
-  updated_note  = COALESCE($9, updated_note),
+  status        = COALESCE($8, status),
+  updated_by    = COALESCE($9, updated_by),
+  updated_note  = COALESCE($10, updated_note),
   updated_at    = now()
 WHERE id = $1
-RETURNING id, fasilitas_id, kontrak_id, ruangan_id, mata_kuliah_id, pembimbing_id, jadwal_dinas, user_id, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, tgl_kehadiran, presensi, created_by, created_at
+RETURNING id, fasilitas_id, kontrak_id, ruangan_id, mata_kuliah_id, pembimbing_id, pembimbing_klinik, jadwal_dinas, user_id, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, tgl_kehadiran, presensi, status, created_by, created_at
 `
 
 type UpdateKehadiranPartialParams struct {
@@ -387,6 +446,7 @@ type UpdateKehadiranPartialParams struct {
 	PembimbingID *uuid.UUID `json:"pembimbing_id"`
 	JadwalDinas  *string    `json:"jadwal_dinas"`
 	IsActive     *bool      `json:"is_active"`
+	Status       *string    `json:"status"`
 	UpdatedBy    *string    `json:"updated_by"`
 	UpdatedNote  *string    `json:"updated_note"`
 }
@@ -400,6 +460,7 @@ func (q *Queries) UpdateKehadiranPartial(ctx context.Context, arg UpdateKehadira
 		arg.PembimbingID,
 		arg.JadwalDinas,
 		arg.IsActive,
+		arg.Status,
 		arg.UpdatedBy,
 		arg.UpdatedNote,
 	)
@@ -411,6 +472,7 @@ func (q *Queries) UpdateKehadiranPartial(ctx context.Context, arg UpdateKehadira
 		&i.RuanganID,
 		&i.MataKuliahID,
 		&i.PembimbingID,
+		&i.PembimbingKlinik,
 		&i.JadwalDinas,
 		&i.UserID,
 		&i.IsActive,
@@ -421,6 +483,7 @@ func (q *Queries) UpdateKehadiranPartial(ctx context.Context, arg UpdateKehadira
 		&i.UpdatedAt,
 		&i.TglKehadiran,
 		&i.Presensi,
+		&i.Status,
 		&i.CreatedBy,
 		&i.CreatedAt,
 	)

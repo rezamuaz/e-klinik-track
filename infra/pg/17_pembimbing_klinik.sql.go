@@ -13,29 +13,30 @@ import (
 
 const createPembimbingKlinik = `-- name: CreatePembimbingKlinik :one
 INSERT INTO pembimbing_klinik (
-    fasilitas_id, user_id, is_active, created_by
+    fasilitas_id, kontrak_id,user_id, created_by
 ) VALUES ($1, $2, $3, $4)
-RETURNING id, fasilitas_id, user_id, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at
+RETURNING id, fasilitas_id, kontrak_id, user_id, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at
 `
 
 type CreatePembimbingKlinikParams struct {
-	FasilitasID *uuid.UUID `json:"fasilitas_id"`
-	UserID      *uuid.UUID `json:"user_id"`
-	IsActive    bool       `json:"is_active"`
-	CreatedBy   *string    `json:"created_by"`
+	FasilitasID uuid.UUID `json:"fasilitas_id"`
+	KontrakID   uuid.UUID `json:"kontrak_id"`
+	UserID      uuid.UUID `json:"user_id"`
+	CreatedBy   *string   `json:"created_by"`
 }
 
 func (q *Queries) CreatePembimbingKlinik(ctx context.Context, arg CreatePembimbingKlinikParams) (PembimbingKlinik, error) {
 	row := q.db.QueryRow(ctx, createPembimbingKlinik,
 		arg.FasilitasID,
+		arg.KontrakID,
 		arg.UserID,
-		arg.IsActive,
 		arg.CreatedBy,
 	)
 	var i PembimbingKlinik
 	err := row.Scan(
 		&i.ID,
 		&i.FasilitasID,
+		&i.KontrakID,
 		&i.UserID,
 		&i.IsActive,
 		&i.DeletedBy,
@@ -60,7 +61,7 @@ func (q *Queries) DeletePembimbingKlinik(ctx context.Context, id uuid.UUID) erro
 }
 
 const getAllPembimbingKlinik = `-- name: GetAllPembimbingKlinik :many
-SELECT id, fasilitas_id, user_id, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at FROM pembimbing_klinik
+SELECT id, fasilitas_id, kontrak_id, user_id, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at FROM pembimbing_klinik
 ORDER BY created_at DESC
 `
 
@@ -76,6 +77,7 @@ func (q *Queries) GetAllPembimbingKlinik(ctx context.Context) ([]PembimbingKlini
 		if err := rows.Scan(
 			&i.ID,
 			&i.FasilitasID,
+			&i.KontrakID,
 			&i.UserID,
 			&i.IsActive,
 			&i.DeletedBy,
@@ -97,7 +99,7 @@ func (q *Queries) GetAllPembimbingKlinik(ctx context.Context) ([]PembimbingKlini
 }
 
 const getPembimbingKlinikByID = `-- name: GetPembimbingKlinikByID :one
-SELECT id, fasilitas_id, user_id, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at FROM pembimbing_klinik
+SELECT id, fasilitas_id, kontrak_id, user_id, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at FROM pembimbing_klinik
 WHERE id = $1
 `
 
@@ -107,6 +109,7 @@ func (q *Queries) GetPembimbingKlinikByID(ctx context.Context, id uuid.UUID) (Pe
 	err := row.Scan(
 		&i.ID,
 		&i.FasilitasID,
+		&i.KontrakID,
 		&i.UserID,
 		&i.IsActive,
 		&i.DeletedBy,
@@ -120,40 +123,85 @@ func (q *Queries) GetPembimbingKlinikByID(ctx context.Context, id uuid.UUID) (Pe
 	return i, err
 }
 
-const updatePembimbingKlinik = `-- name: UpdatePembimbingKlinik :one
-UPDATE pembimbing_klinik
-SET fasilitas_id = $2,
-    user_id = $3,
-    is_active = $4,
-    updated_note = $5,
-    updated_by = $6,
-    updated_at = now()
-WHERE id = $1
-RETURNING id, fasilitas_id, user_id, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at
+const listPembimbingKlinikByKontrakID = `-- name: ListPembimbingKlinikByKontrakID :many
+SELECT
+    t2.id,
+    t2.nama,
+    t1.is_active
+FROM
+    pembimbing_klinik t1
+JOIN
+    users t2 ON t1.user_id = t2.id
+WHERE
+    t1.kontrak_id = $1
+    AND t1.deleted_at IS NULL
 `
 
-type UpdatePembimbingKlinikParams struct {
-	ID          uuid.UUID  `json:"id"`
-	FasilitasID *uuid.UUID `json:"fasilitas_id"`
-	UserID      *uuid.UUID `json:"user_id"`
-	IsActive    bool       `json:"is_active"`
-	UpdatedNote *string    `json:"updated_note"`
-	UpdatedBy   *string    `json:"updated_by"`
+type ListPembimbingKlinikByKontrakIDRow struct {
+	ID       uuid.UUID `json:"id"`
+	Nama     string    `json:"nama"`
+	IsActive bool      `json:"is_active"`
 }
 
-func (q *Queries) UpdatePembimbingKlinik(ctx context.Context, arg UpdatePembimbingKlinikParams) (PembimbingKlinik, error) {
-	row := q.db.QueryRow(ctx, updatePembimbingKlinik,
+func (q *Queries) ListPembimbingKlinikByKontrakID(ctx context.Context, kontrakID uuid.UUID) ([]ListPembimbingKlinikByKontrakIDRow, error) {
+	rows, err := q.db.Query(ctx, listPembimbingKlinikByKontrakID, kontrakID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPembimbingKlinikByKontrakIDRow{}
+	for rows.Next() {
+		var i ListPembimbingKlinikByKontrakIDRow
+		if err := rows.Scan(&i.ID, &i.Nama, &i.IsActive); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updatePembimbingKlinikPartial = `-- name: UpdatePembimbingKlinikPartial :one
+UPDATE pembimbing_klinik
+SET
+  fasilitas_id = COALESCE($2, fasilitas_id),
+  kontrak_id   = COALESCE($3, kontrak_id),
+  user_id      = COALESCE($4, user_id),
+  is_active    = COALESCE($5, is_active),
+  updated_by   = COALESCE($6, updated_by),
+  updated_note = COALESCE($7, updated_note),
+  updated_at   = now()
+WHERE id = $1
+RETURNING id, fasilitas_id, kontrak_id, user_id, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at
+`
+
+type UpdatePembimbingKlinikPartialParams struct {
+	ID          uuid.UUID  `json:"id"`
+	FasilitasID *uuid.UUID `json:"fasilitas_id"`
+	KontrakID   *uuid.UUID `json:"kontrak_id"`
+	UserID      *uuid.UUID `json:"user_id"`
+	IsActive    *bool      `json:"is_active"`
+	UpdatedBy   *string    `json:"updated_by"`
+	UpdatedNote *string    `json:"updated_note"`
+}
+
+func (q *Queries) UpdatePembimbingKlinikPartial(ctx context.Context, arg UpdatePembimbingKlinikPartialParams) (PembimbingKlinik, error) {
+	row := q.db.QueryRow(ctx, updatePembimbingKlinikPartial,
 		arg.ID,
 		arg.FasilitasID,
+		arg.KontrakID,
 		arg.UserID,
 		arg.IsActive,
-		arg.UpdatedNote,
 		arg.UpdatedBy,
+		arg.UpdatedNote,
 	)
 	var i PembimbingKlinik
 	err := row.Scan(
 		&i.ID,
 		&i.FasilitasID,
+		&i.KontrakID,
 		&i.UserID,
 		&i.IsActive,
 		&i.DeletedBy,

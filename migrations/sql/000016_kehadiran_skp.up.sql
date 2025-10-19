@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS kehadiran_skp (
     user_id UUID NOT NULL,
     status VARCHAR,
     is_active BOOLEAN NOT NULL DEFAULT true,
+    locked BOOLEAN DEFAULT false,
     deleted_by VARCHAR,
     deleted_at TIMESTAMPTZ,
     updated_note TEXT,

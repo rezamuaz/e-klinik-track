@@ -54,6 +54,14 @@ type MainUsecase interface {
 	GetUsersByRoles(c context.Context, arg []int32) (any, error)
 	CheckKehadiran(c context.Context, arg uuid.UUID) (any, error)
 	SkpByKehadiranId(c context.Context, arg uuid.UUID) (any, error)
+	RekapKehadiranMahasiswa(c context.Context, arg request.SearchRekapKehadiranMahasiswa) (any, error)
+	RekapKehadiranMahasiswaDetail(c context.Context, arg request.SearchRekapKehadiranMahasiswa) (any, error)
+	AddPembimbingKlinik(c context.Context, arg pg.CreatePembimbingKlinikParams) (any, error)
+	ListPembimbingKlinikByKontrak(c context.Context, arg uuid.UUID) (any, error)
+	GetKehadiranByPembimbingStatus(c context.Context, arg pg.GetKehadiranByPembimbingUserIdParams) (any, error)
+	IntervensiByKehadiranId(c context.Context, arg uuid.UUID) (any, error)
+	ApproveSkpKehadiran(c context.Context, arg request.ApproveKehadiranSkp) (any, error)
+	GetKehadiranByMahasiswaStatus(c context.Context, arg pg.GetKehadiranByPembimbingUserIdParams) (any, error)
 }
 
 type MainUsecaseImpl struct {
@@ -466,12 +474,21 @@ func (mu *MainUsecaseImpl) DeleteKehadiran(c context.Context, arg pg.DeleteKehad
 }
 
 func (mu *MainUsecaseImpl) SyncSkpKehadiran(c context.Context, arg pg.SyncKehadiranSkpParams) (any, error) {
+	return utils.WithTransactionResult(c, mu.pg.Pool, func(qtx *pg.Queries, tx pgx.Tx) (any, error) {
 
-	res, err := mu.db.SyncKehadiranSkp(c, arg)
-	if err != nil {
-		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed create kehadiran skp")
-	}
-	return res, nil
+		result, err := qtx.GetKehadiran(c, arg.KehadiranID)
+		if err != nil {
+			return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get kehadiran")
+		}
+		if result.Status == nil {
+			_, err := qtx.SyncKehadiranSkp(c, arg)
+			if err != nil {
+				return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed create kehadiran skp")
+			}
+		}
+
+		return result, nil
+	})
 }
 
 func (mu *MainUsecaseImpl) ListKehadiranSkp(c context.Context, arg request.SearchKehadiranSkp) (any, error) {
@@ -669,6 +686,117 @@ func (mu *MainUsecaseImpl) RekapKehadiranMahasiswa(c context.Context, arg reques
 	res, err := mu.db.RekapKehadiranMahasiswa(c, params)
 	if err != nil {
 		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get rekap kehadiran")
+	}
+	return resp.WithPaginate(res, nil), nil
+}
+
+func (mu *MainUsecaseImpl) RekapKehadiranMahasiswaDetail(c context.Context, arg request.SearchRekapKehadiranMahasiswa) (any, error) {
+
+	var params pg.RekapKehadiranMahasiswaDetailParams
+	err := copier.Copy(&params, &arg)
+	if err != nil {
+		return nil, err
+	}
+
+	if arg.UserID != "" {
+		params.UserID = uuid.FromStringOrNil(arg.UserID)
+	}
+
+	var tglAwal pgtype.Date
+	tglAwal.Scan(arg.TglAwal)
+	var tglAkhir pgtype.Date
+	tglAkhir.Scan(arg.TglAkhir)
+	params.TglAwal = tglAwal
+	params.TglAkhir = tglAkhir
+
+	res, err := mu.db.RekapKehadiranMahasiswaDetail(c, params)
+	if err != nil {
+		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get rekap kehadiran")
+	}
+	return resp.WithPaginate(res, nil), nil
+}
+
+func (mu *MainUsecaseImpl) AddPembimbingKlinik(c context.Context, arg pg.CreatePembimbingKlinikParams) (any, error) {
+	kontrak, err := mu.db.GetKontrakByID(c, arg.KontrakID)
+	if err != nil {
+		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get kontrak klinik")
+	}
+	arg.FasilitasID = kontrak.FasilitasID
+	res, err := mu.db.CreatePembimbingKlinik(c, arg)
+	if err != nil {
+		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed create pembimbing klinik")
+	}
+	return res, nil
+}
+
+func (mu *MainUsecaseImpl) ListPembimbingKlinikByKontrak(c context.Context, arg uuid.UUID) (any, error) {
+
+	res, err := mu.db.ListPembimbingKlinikByKontrakID(c, arg)
+	if err != nil {
+		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get kontrak")
+	}
+	if len(res) == 0 {
+		return resp.WithPaginate([]string{}, nil), err
+	}
+	return resp.WithPaginate(res, nil), nil
+}
+
+func (mu *MainUsecaseImpl) GetKehadiranByPembimbingStatus(c context.Context, arg pg.GetKehadiranByPembimbingUserIdParams) (any, error) {
+
+	res, err := mu.db.GetKehadiranByPembimbingUserId(c, arg)
+	if err != nil {
+		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get kehadiran")
+	}
+	if len(res) == 0 {
+		return resp.WithPaginate([]string{}, nil), err
+	}
+	return resp.WithPaginate(res, nil), nil
+}
+
+func (mu *MainUsecaseImpl) IntervensiByKehadiranId(c context.Context, arg uuid.UUID) (any, error) {
+
+	// var err error
+	res, err := mu.db.IntervensiKehadiranID(c, arg)
+	if err != nil {
+		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get data")
+	}
+	if len(res) == 0 {
+		return resp.WithPaginate([]string{}, nil), err
+	}
+
+	return resp.WithPaginate(res, nil), nil
+
+}
+
+func (mu *MainUsecaseImpl) ApproveSkpKehadiran(c context.Context, arg request.ApproveKehadiranSkp) (any, error) {
+	return utils.WithTransactionResult(c, mu.pg.Pool, func(qtx *pg.Queries, tx pgx.Tx) (any, error) {
+		var err error
+
+		u := pg.UpdateKehadiranPartialParams{
+			ID:     arg.KehadiranID,
+			Status: utils.StringPtr("disetujui"),
+		}
+		res, err := qtx.UpdateKehadiranPartial(c, u)
+		a := pg.ApproveKehadiranSkpByIdsParams{
+			UpdatedBy:      arg.UpdatedBy,
+			SkpKehadiranID: arg.SkpKehadiranID,
+		}
+		err = qtx.ApproveKehadiranSkpByIds(c, a)
+		if err != nil {
+			return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed create kehadiran skp")
+		}
+		return res, nil
+	})
+}
+
+func (mu *MainUsecaseImpl) GetKehadiranByMahasiswaStatus(c context.Context, arg pg.GetKehadiranByPembimbingUserIdParams) (any, error) {
+
+	res, err := mu.db.GetKehadiranByPembimbingUserId(c, arg)
+	if err != nil {
+		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get kehadiran")
+	}
+	if len(res) == 0 {
+		return resp.WithPaginate([]string{}, nil), err
 	}
 	return resp.WithPaginate(res, nil), nil
 }

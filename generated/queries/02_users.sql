@@ -29,38 +29,69 @@ GROUP BY u.id, u.username, u.password, u.nama;
 
 -- name: ListUsers :many
 SELECT
-  id,
-  nama,
-  username,
-  last_active,
-  is_active,
-  locked_until,
-  failed_attempts,
-  last_failed_at,
-  created_by,
-  created_at
-FROM public.users
-WHERE deleted_at IS NULL
-  AND (sqlc.narg('nama')::text IS NULL OR nama ILIKE '%' || sqlc.narg('nama') || '%')
-  AND (sqlc.narg('username')::text IS NULL OR username ILIKE '%' || sqlc.narg('username') || '%')
-  AND (sqlc.narg('is_active')::boolean IS NULL OR is_active = sqlc.narg('is_active')::boolean)
+  u.id,
+  u.nama,
+  u.username,
+  u.last_active,
+  u.is_active,
+  u.locked_until,
+  u.failed_attempts,
+  u.last_failed_at,
+  u.created_by,
+  u.created_at,
+  COALESCE(string_agg(DISTINCT r.nama, ', '), '')::text AS roles,
+  COALESCE(string_agg(DISTINCT r.tag, ', '), '')::text AS tags
+FROM public.users u
+LEFT JOIN public.r5_user_roles ur
+  ON u.id = ur.user_id
+LEFT JOIN public.r4_roles r
+  ON ur.role_id = r.id    
+WHERE 
+  u.deleted_at IS NULL
+  AND (sqlc.narg('nama')::text IS NULL OR u.nama ILIKE '%' || sqlc.narg('nama') || '%')
+  AND (sqlc.narg('username')::text IS NULL OR u.username ILIKE '%' || sqlc.narg('username') || '%')
+  AND (sqlc.narg('is_active')::boolean IS NULL OR u.is_active = sqlc.narg('is_active')::boolean)
+  AND (
+    sqlc.narg('roles')::int[] IS NULL 
+    OR array_length(sqlc.narg('roles')::int[], 1) IS NULL 
+    OR ur.role_id = ANY(sqlc.narg('roles')::int[])
+  )
+GROUP BY
+  u.id,
+  u.nama,
+  u.username,
+  u.last_active,
+  u.is_active,
+  u.locked_until,
+  u.failed_attempts,
+  u.last_failed_at,
+  u.created_by,
+  u.created_at
 ORDER BY
-  CASE WHEN sqlc.narg('order_by')::text = 'nama' AND sqlc.narg('sort')::text = 'asc'  THEN nama END ASC,
-  CASE WHEN sqlc.narg('order_by')::text = 'nama' AND sqlc.narg('sort')::text = 'desc' THEN nama END DESC,
-  CASE WHEN sqlc.narg('order_by')::text = 'username' AND sqlc.narg('sort')::text = 'asc'  THEN username END ASC,
-  CASE WHEN sqlc.narg('order_by')::text = 'username' AND sqlc.narg('sort')::text = 'desc' THEN username END DESC,
-  CASE WHEN sqlc.narg('order_by')::text = 'created_at' AND sqlc.narg('sort')::text = 'asc'  THEN created_at END ASC,
-  CASE WHEN sqlc.narg('order_by')::text = 'created_at' AND sqlc.narg('sort')::text = 'desc' THEN created_at END DESC
+  CASE WHEN sqlc.narg('order_by')::text = 'nama' AND sqlc.narg('sort')::text = 'asc'  THEN u.nama END ASC,
+  CASE WHEN sqlc.narg('order_by')::text = 'nama' AND sqlc.narg('sort')::text = 'desc' THEN u.nama END DESC,
+  CASE WHEN sqlc.narg('order_by')::text = 'username' AND sqlc.narg('sort')::text = 'asc'  THEN u.username END ASC,
+  CASE WHEN sqlc.narg('order_by')::text = 'username' AND sqlc.narg('sort')::text = 'desc' THEN u.username END DESC,
+  CASE WHEN sqlc.narg('order_by')::text = 'created_at' AND sqlc.narg('sort')::text = 'asc'  THEN u.created_at END ASC,
+  CASE WHEN sqlc.narg('order_by')::text = 'created_at' AND sqlc.narg('sort')::text = 'desc' THEN u.created_at END DESC
 LIMIT sqlc.arg('limit')
 OFFSET sqlc.arg('offset');
 
 -- name: CountUsers :one
-SELECT COUNT(*)::bigint
-FROM public.users
-WHERE deleted_at IS NULL
-  AND (sqlc.narg('nama')::text IS NULL OR nama ILIKE '%' || sqlc.narg('nama') || '%')
-  AND (sqlc.narg('username')::text IS NULL OR username ILIKE '%' || sqlc.narg('username') || '%')
-  AND (sqlc.narg('is_active')::boolean IS NULL OR is_active = sqlc.narg('is_active')::boolean);
+SELECT COUNT(DISTINCT u.id)::bigint
+FROM public.users u
+LEFT JOIN public.r5_user_roles ur
+  ON u.id = ur.user_id
+WHERE 
+  u.deleted_at IS NULL
+  AND (sqlc.narg('nama')::text IS NULL OR u.nama ILIKE '%' || sqlc.narg('nama') || '%')
+  AND (sqlc.narg('username')::text IS NULL OR u.username ILIKE '%' || sqlc.narg('username') || '%')
+  AND (sqlc.narg('is_active')::boolean IS NULL OR u.is_active = sqlc.narg('is_active')::boolean)
+  AND (
+    sqlc.narg('roles')::int[] IS NULL 
+    OR array_length(sqlc.narg('roles')::int[], 1) IS NULL 
+    OR ur.role_id = ANY(sqlc.narg('roles')::int[])
+  );
 
 
 -- name: CreateOrUpdateUser :one
@@ -147,3 +178,4 @@ WHERE
     AND u.is_active = TRUE
 ORDER BY 
     u.nama;
+

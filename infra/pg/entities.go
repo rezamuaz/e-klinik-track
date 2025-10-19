@@ -55,24 +55,26 @@ type Kabupaten struct {
 }
 
 type Kehadiran struct {
-	ID           uuid.UUID          `json:"id"`
-	FasilitasID  uuid.UUID          `json:"fasilitas_id"`
-	KontrakID    uuid.UUID          `json:"kontrak_id"`
-	RuanganID    uuid.UUID          `json:"ruangan_id"`
-	MataKuliahID uuid.UUID          `json:"mata_kuliah_id"`
-	PembimbingID uuid.UUID          `json:"pembimbing_id"`
-	JadwalDinas  *string            `json:"jadwal_dinas"`
-	UserID       uuid.UUID          `json:"user_id"`
-	IsActive     bool               `json:"is_active"`
-	DeletedBy    *string            `json:"deleted_by"`
-	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
-	UpdatedNote  *string            `json:"updated_note"`
-	UpdatedBy    *string            `json:"updated_by"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
-	TglKehadiran pgtype.Date        `json:"tgl_kehadiran"`
-	Presensi     string             `json:"presensi"`
-	CreatedBy    *string            `json:"created_by"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	ID               uuid.UUID          `json:"id"`
+	FasilitasID      uuid.UUID          `json:"fasilitas_id"`
+	KontrakID        uuid.UUID          `json:"kontrak_id"`
+	RuanganID        uuid.UUID          `json:"ruangan_id"`
+	MataKuliahID     uuid.UUID          `json:"mata_kuliah_id"`
+	PembimbingID     uuid.UUID          `json:"pembimbing_id"`
+	PembimbingKlinik uuid.UUID          `json:"pembimbing_klinik"`
+	JadwalDinas      *string            `json:"jadwal_dinas"`
+	UserID           uuid.UUID          `json:"user_id"`
+	IsActive         bool               `json:"is_active"`
+	DeletedBy        *string            `json:"deleted_by"`
+	DeletedAt        pgtype.Timestamptz `json:"deleted_at"`
+	UpdatedNote      *string            `json:"updated_note"`
+	UpdatedBy        *string            `json:"updated_by"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	TglKehadiran     pgtype.Date        `json:"tgl_kehadiran"`
+	Presensi         string             `json:"presensi"`
+	Status           *string            `json:"status"`
+	CreatedBy        *string            `json:"created_by"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 }
 
 type KehadiranSkp struct {
@@ -82,6 +84,7 @@ type KehadiranSkp struct {
 	UserID          uuid.UUID          `json:"user_id"`
 	Status          *string            `json:"status"`
 	IsActive        bool               `json:"is_active"`
+	Locked          *bool              `json:"locked"`
 	DeletedBy       *string            `json:"deleted_by"`
 	DeletedAt       pgtype.Timestamptz `json:"deleted_at"`
 	UpdatedNote     *string            `json:"updated_note"`
@@ -125,8 +128,9 @@ type MataKuliah struct {
 
 type PembimbingKlinik struct {
 	ID          uuid.UUID          `json:"id"`
-	FasilitasID *uuid.UUID         `json:"fasilitas_id"`
-	UserID      *uuid.UUID         `json:"user_id"`
+	FasilitasID uuid.UUID          `json:"fasilitas_id"`
+	KontrakID   uuid.UUID          `json:"kontrak_id"`
+	UserID      uuid.UUID          `json:"user_id"`
 	IsActive    bool               `json:"is_active"`
 	DeletedBy   *string            `json:"deleted_by"`
 	DeletedAt   pgtype.Timestamptz `json:"deleted_at"`

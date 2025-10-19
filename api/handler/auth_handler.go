@@ -707,22 +707,21 @@ func (lc *AuthHandlerImpl) ViewRoleId(c *gin.Context) {
 }
 
 func (lc *AuthHandlerImpl) AddRolePolicyByRoleId(c *gin.Context) {
-	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 	id := c.Param("id")
 	var p request.UpdateRolePolicy
 	p.RoleID = utils.StrToInt32(id)
-	err := c.ShouldBindJSON(&p)
+	err := c.ShouldBind(&p)
 	if err != nil {
 		resp.GenerateBaseResponseWithError(c, "failed update policy", pkg.WrapErrorf(err, pkg.ErrorCodeInvalidArgument, "invalid json"))
 		return
 	}
 	value, _ := c.Get("nama")
 	p.CreatedBy = utils.StringPtr(value.(string))
-
 	res, err := lc.Uu.AddRolePolicy(ctx, p)
 	if err != nil {
-		resp.GenerateBaseResponseWithError(c, "failed update policy", err)
+		resp.GenerateBaseResponseWithError(c, "failed update policy", pkg.WrapErrorf(err, pkg.ErrorCodeInvalidArgument, "invalid json"))
 		return
 	}
 	c.JSON(http.StatusOK, resp.GenerateBaseResponse(res, true, 0))

@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS kehadiran (
     ruangan_id UUID NOT NULL,
     mata_kuliah_id UUID NOT NULL,
     pembimbing_id UUID NOT NULL,
+    pembimbing_klinik UUID NOT NULL,
     jadwal_dinas VARCHAR,
     user_id UUID NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT true,
@@ -15,6 +16,7 @@ CREATE TABLE IF NOT EXISTS kehadiran (
     updated_at TIMESTAMPTZ,
     tgl_kehadiran DATE NOT NULL,
     presensi VARCHAR NOT NULL DEFAULT 'hadir',
+    status VARCHAR,
     created_by VARCHAR,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

@@ -573,8 +573,8 @@ func (h *MainHandlerImpl) CreateSyncKehadiranSkp(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, resp.GenerateBaseResponse(result, true, resp.Success))
-
 }
+
 func (h *MainHandlerImpl) ListKehadiranSkp(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c, 10*time.Second)
 	defer cancel()
@@ -772,4 +772,161 @@ func (h *MainHandlerImpl) SkpByKehadiranId(c *gin.Context) {
 
 	c.JSON(http.StatusOK, resp.GenerateBaseResponse(result, true, 0))
 
+}
+
+func (h *MainHandlerImpl) RekapKehadiranMahasiswa(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+	var req request.SearchRekapKehadiranMahasiswa
+
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(400, gin.H{"error": "Invalid query parameters"})
+		return
+	}
+
+	result, err := h.mainUsecase.RekapKehadiranMahasiswa(ctx, req)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed get rekap kehadiran", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(result, true, 0))
+
+}
+
+func (h *MainHandlerImpl) RekapKehadiranMahasiswaDetail(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+	var req request.SearchRekapKehadiranMahasiswa
+
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(400, gin.H{"error": "Invalid query parameters"})
+		return
+	}
+
+	result, err := h.mainUsecase.RekapKehadiranMahasiswaDetail(ctx, req)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed get rekap kehadiran", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(result, true, 0))
+
+}
+
+func (h *MainHandlerImpl) CreatePembimbingKlinik(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+
+	var p pg.CreatePembimbingKlinikParams
+	err := c.ShouldBindJSON(&p)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed created pembimbing klinik", pkg.WrapErrorf(err, pkg.ErrorCodeInvalidArgument, "invalid json"))
+		return
+	}
+	value, _ := c.Get("nama")
+	p.CreatedBy = utils.StringPtr(value.(string))
+
+	result, err := h.mainUsecase.AddPembimbingKlinik(ctx, p)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed created pembimbing klinik", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(result, true, resp.Success))
+
+}
+
+func (h *MainHandlerImpl) ListPembimbingKlinikByKontrak(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+
+	id := c.Param("id")
+	if id == "" {
+		resp.GenerateBaseResponseWithError(c, "get pembimbing failed", pkg.NewErrorf(pkg.ErrorCodeInvalidArgument, "invalid id"))
+	}
+	uuid := uuid.Must(uuid.FromString(id))
+
+	result, err := h.mainUsecase.ListPembimbingKlinikByKontrak(ctx, uuid)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed get pembimbing klinik", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(result, true, 0))
+
+}
+
+func (h *MainHandlerImpl) GetKehadiranByPembimbingStatus(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+
+	var arg pg.GetKehadiranByPembimbingUserIdParams
+	value, _ := c.Get("Id")
+	id := uuid.Must(uuid.FromString(value.(string)))
+	arg.PembimbingKlinik = &id
+
+	result, err := h.mainUsecase.GetKehadiranByPembimbingStatus(ctx, arg)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed get kehadiran", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(result, true, 0))
+}
+func (h *MainHandlerImpl) GetKehadiranByMahasiswaStatus(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+
+	var arg pg.GetKehadiranByPembimbingUserIdParams
+	value, _ := c.Get("Id")
+	id := uuid.Must(uuid.FromString(value.(string)))
+	arg.UserID = &id
+
+	result, err := h.mainUsecase.GetKehadiranByPembimbingStatus(ctx, arg)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed get kehadiran", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(result, true, 0))
+}
+
+func (h *MainHandlerImpl) IntervensiKehadiranId(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+
+	raw := c.Query("kehadiran_id")
+	id := uuid.Must(uuid.FromString(raw))
+
+	result, err := h.mainUsecase.IntervensiByKehadiranId(ctx, id)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed get ruangan", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(result, true, 0))
+
+}
+
+func (h *MainHandlerImpl) ApproveKehadiranSkp(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c, 5*time.Second)
+	defer cancel()
+	var p request.ApproveKehadiranSkp
+	err := c.ShouldBindJSON(&p)
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed approve kehadiran", pkg.WrapErrorf(err, pkg.ErrorCodeInvalidArgument, "invalid json"))
+		return
+	}
+	value, _ := c.Get("nama")
+	p.UpdatedBy = utils.StringPtr(value.(string))
+
+	res, err := h.mainUsecase.ApproveSkpKehadiran(ctx, p)
+
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed approve kehadiran", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(res, true, resp.Success))
 }

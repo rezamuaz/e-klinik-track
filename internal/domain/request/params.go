@@ -165,6 +165,7 @@ type SearchUser struct {
 	Page     int32   `form:"page" json:"page"`
 	Nama     *string `form:"nama" json:"nama"`
 	Username *string `form:"username" json:"username"`
+	Roles    string  `form:"roles" json:"roles"`
 	IsActive *bool   `form:"is_active" json:"is_active"`
 	OrderBy  *string `form:"order_by" json:"order_by"`
 	Sort     *string `form:"sort" json:"sort"`
@@ -200,4 +201,10 @@ type SearchRekapKehadiranMahasiswa struct {
 	UserID   string `form:"user_id" json:"user_id"`
 	TglAwal  string `form:"tgl_awal" json:"tgl_awal"`
 	TglAkhir string `form:"tgl_akhir" json:"tgl_akhir"`
+}
+
+type ApproveKehadiranSkp struct {
+	UpdatedBy      *string     `json:"updated_by"`
+	SkpKehadiranID []uuid.UUID `json:"skp_kehadiran_id"`
+	KehadiranID    uuid.UUID   `json:"kehadiran_id"`
 }

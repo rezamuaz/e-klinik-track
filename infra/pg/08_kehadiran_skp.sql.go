@@ -12,6 +12,28 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const approveKehadiranSkpByIds = `-- name: ApproveKehadiranSkpByIds :exec
+UPDATE public.kehadiran_skp
+SET
+  status = 'disetujui',
+  locked = TRUE,
+  updated_at = now(),
+  updated_by = $1 -- Parameter opsional untuk menyimpan siapa yang melakukan update (misalnya user_id atau username)
+WHERE
+  id = ANY ($2::uuid[]) -- $1 adalah list UUID yang Anda masukkan
+  AND deleted_at IS NULL
+`
+
+type ApproveKehadiranSkpByIdsParams struct {
+	UpdatedBy      *string     `json:"updated_by"`
+	SkpKehadiranID []uuid.UUID `json:"skp_kehadiran_id"`
+}
+
+func (q *Queries) ApproveKehadiranSkpByIds(ctx context.Context, arg ApproveKehadiranSkpByIdsParams) error {
+	_, err := q.db.Exec(ctx, approveKehadiranSkpByIds, arg.UpdatedBy, arg.SkpKehadiranID)
+	return err
+}
+
 const countKehadiranSkp = `-- name: CountKehadiranSkp :one
 SELECT COUNT(*)::bigint
 FROM kehadiran_skp
@@ -60,7 +82,7 @@ func (q *Queries) DeleteKehadiranSkp(ctx context.Context, arg DeleteKehadiranSkp
 }
 
 const getKehadiranSkp = `-- name: GetKehadiranSkp :one
-SELECT id, kehadiran_id, skp_intervensi_id, user_id, status, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at
+SELECT id, kehadiran_id, skp_intervensi_id, user_id, status, is_active, locked, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at
 FROM kehadiran_skp
 WHERE id = $1
   AND deleted_at IS NULL
@@ -76,6 +98,7 @@ func (q *Queries) GetKehadiranSkp(ctx context.Context, id uuid.UUID) (KehadiranS
 		&i.UserID,
 		&i.Status,
 		&i.IsActive,
+		&i.Locked,
 		&i.DeletedBy,
 		&i.DeletedAt,
 		&i.UpdatedNote,
@@ -85,6 +108,54 @@ func (q *Queries) GetKehadiranSkp(ctx context.Context, id uuid.UUID) (KehadiranS
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const intervensiKehadiranID = `-- name: IntervensiKehadiranID :many
+SELECT
+ks.id,
+  si.nama, 
+  ks.skp_intervensi_id,
+  ks.locked
+FROM public.kehadiran_skp ks
+LEFT JOIN public.skp_intervensi si
+  ON ks.skp_intervensi_id = si.id
+WHERE 
+  ks.kehadiran_id = $1
+  AND ks.is_active = TRUE
+  AND ks.deleted_at IS NULL
+ORDER BY ks.created_at DESC
+`
+
+type IntervensiKehadiranIDRow struct {
+	ID              uuid.UUID `json:"id"`
+	Nama            *string   `json:"nama"`
+	SkpIntervensiID uuid.UUID `json:"skp_intervensi_id"`
+	Locked          *bool     `json:"locked"`
+}
+
+func (q *Queries) IntervensiKehadiranID(ctx context.Context, kehadiranID uuid.UUID) ([]IntervensiKehadiranIDRow, error) {
+	rows, err := q.db.Query(ctx, intervensiKehadiranID, kehadiranID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []IntervensiKehadiranIDRow{}
+	for rows.Next() {
+		var i IntervensiKehadiranIDRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Nama,
+			&i.SkpIntervensiID,
+			&i.Locked,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listKehadiranSkp = `-- name: ListKehadiranSkp :many
@@ -228,7 +299,7 @@ inserted AS (
        OR k.locked = false             -- atau baris belum terkunci
     ON CONFLICT (kehadiran_id, skp_intervensi_id)
     DO NOTHING
-    RETURNING kehadiran_skp.id, kehadiran_skp.kehadiran_id, kehadiran_skp.skp_intervensi_id, kehadiran_skp.user_id, kehadiran_skp.status, kehadiran_skp.is_active, kehadiran_skp.deleted_by, kehadiran_skp.deleted_at, kehadiran_skp.updated_note, kehadiran_skp.updated_by, kehadiran_skp.updated_at, kehadiran_skp.created_by, kehadiran_skp.created_at
+    RETURNING kehadiran_skp.id, kehadiran_skp.kehadiran_id, kehadiran_skp.skp_intervensi_id, kehadiran_skp.user_id, kehadiran_skp.status, kehadiran_skp.is_active, kehadiran_skp.locked, kehadiran_skp.deleted_by, kehadiran_skp.deleted_at, kehadiran_skp.updated_note, kehadiran_skp.updated_by, kehadiran_skp.updated_at, kehadiran_skp.created_by, kehadiran_skp.created_at
 ),
 
 deleted AS (
@@ -236,12 +307,12 @@ deleted AS (
     WHERE k.kehadiran_id = $2
       AND k.locked = false
       AND k.skp_intervensi_id NOT IN (SELECT skp_intervensi_id FROM input_data)
-    RETURNING k.id, k.kehadiran_id, k.skp_intervensi_id, k.user_id, k.status, k.is_active, k.deleted_by, k.deleted_at, k.updated_note, k.updated_by, k.updated_at, k.created_by, k.created_at
+    RETURNING k.id, k.kehadiran_id, k.skp_intervensi_id, k.user_id, k.status, k.is_active, k.locked, k.deleted_by, k.deleted_at, k.updated_note, k.updated_by, k.updated_at, k.created_by, k.created_at
 )
 
-SELECT id, kehadiran_id, skp_intervensi_id, user_id, status, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at FROM inserted
+SELECT id, kehadiran_id, skp_intervensi_id, user_id, status, is_active, locked, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at FROM inserted
 UNION ALL
-SELECT id, kehadiran_id, skp_intervensi_id, user_id, status, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at FROM deleted
+SELECT id, kehadiran_id, skp_intervensi_id, user_id, status, is_active, locked, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at FROM deleted
 `
 
 type SyncKehadiranSkpParams struct {
@@ -258,6 +329,7 @@ type SyncKehadiranSkpRow struct {
 	UserID          uuid.UUID          `json:"user_id"`
 	Status          *string            `json:"status"`
 	IsActive        bool               `json:"is_active"`
+	Locked          *bool              `json:"locked"`
 	DeletedBy       *string            `json:"deleted_by"`
 	DeletedAt       pgtype.Timestamptz `json:"deleted_at"`
 	UpdatedNote     *string            `json:"updated_note"`
@@ -298,6 +370,7 @@ func (q *Queries) SyncKehadiranSkp(ctx context.Context, arg SyncKehadiranSkpPara
 			&i.UserID,
 			&i.Status,
 			&i.IsActive,
+			&i.Locked,
 			&i.DeletedBy,
 			&i.DeletedAt,
 			&i.UpdatedNote,
@@ -326,7 +399,7 @@ SET
   updated_at   = now()
 WHERE id = $5
   AND deleted_at IS NULL
-RETURNING id, kehadiran_id, skp_intervensi_id, user_id, status, is_active, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at
+RETURNING id, kehadiran_id, skp_intervensi_id, user_id, status, is_active, locked, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at
 `
 
 type UpdateKehadiranSkpParams struct {
@@ -353,6 +426,7 @@ func (q *Queries) UpdateKehadiranSkp(ctx context.Context, arg UpdateKehadiranSkp
 		&i.UserID,
 		&i.Status,
 		&i.IsActive,
+		&i.Locked,
 		&i.DeletedBy,
 		&i.DeletedAt,
 		&i.UpdatedNote,

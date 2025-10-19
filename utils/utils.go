@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -139,21 +140,32 @@ func WithTransactionResult[T any](
 	pool *pgxpool.Pool,
 	fn func(q *pg.Queries, tx pgx.Tx) (T, error),
 ) (T, error) {
-	var zero T // default zero value for T
+	var zero T
 
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return zero, err
 	}
-	defer tx.Rollback(ctx)
 
 	qtx := pg.New(tx)
+
+	// pastikan rollback hanya kalau error atau panic
+	defer func() {
+		if p := recover(); p != nil {
+			_ = tx.Rollback(context.Background())
+			panic(p)
+		} else if err != nil {
+			_ = tx.Rollback(context.Background())
+		}
+	}()
+
 	result, err := fn(qtx, tx)
 	if err != nil {
 		return zero, err
 	}
 
-	if err := tx.Commit(ctx); err != nil {
+	// pakai context.Background agar commit tidak dibatalkan oleh timeout handler
+	if err := tx.Commit(context.Background()); err != nil {
 		return zero, err
 	}
 
@@ -290,4 +302,29 @@ func GetJakartaDateObject() (time.Time, error) {
 	)
 
 	return tanggalJakarta, nil
+}
+
+func StrToListInt32(csv string) ([]int32, error) {
+	if csv == "" {
+		return []int32{}, nil
+	}
+
+	parts := strings.Split(csv, ",")
+	var result []int32
+
+	for _, p := range parts {
+		p = strings.TrimSpace(p) // hilangkan spasi jika ada
+		val, err := strconv.ParseInt(p, 10, 32)
+		if err != nil {
+			fmt.Printf("⚠️ Warning: cannot convert '%s' to int32, skipping\n", p)
+			continue
+		}
+		result = append(result, int32(val))
+	}
+
+	if len(result) == 0 {
+		return nil, fmt.Errorf("no valid int32 values found in input")
+	}
+
+	return result, nil
 }

@@ -1,10 +1,10 @@
 -- name: CreateKehadiran :one
 INSERT INTO kehadiran (
-  fasilitas_id, kontrak_id, ruangan_id, pembimbing_id,user_id,mata_kuliah_id,
+  fasilitas_id, kontrak_id, ruangan_id, pembimbing_id,user_id,pembimbing_klinik,mata_kuliah_id,
   jadwal_dinas, created_by, tgl_kehadiran, presensi
 ) VALUES (
   $1, $2, $3, $4,
-  $5,$6, $7,$8,$9,$10
+  $5,$6, $7,$8,$9,$10,$11
 )
 ON CONFLICT (user_id, tgl_kehadiran) DO NOTHING
 RETURNING *;
@@ -60,6 +60,7 @@ SET
   pembimbing_id = COALESCE(sqlc.narg('pembimbing_id'), pembimbing_id),
   jadwal_dinas  = COALESCE(sqlc.narg('jadwal_dinas'), jadwal_dinas),
   is_active     = COALESCE(sqlc.narg('is_active'), is_active),
+  status        = COALESCE(sqlc.narg('status'), status),
   updated_by    = COALESCE(sqlc.narg('updated_by'), updated_by),
   updated_note  = COALESCE(sqlc.narg('updated_note'), updated_note),
   updated_at    = now()
@@ -106,3 +107,18 @@ WHERE is_active = true
   AND tgl_kehadiran BETWEEN sqlc.arg('tgl_awal') AND sqlc.arg('tgl_akhir')
 GROUP BY tgl_kehadiran
 ORDER BY tgl_kehadiran;
+
+
+-- name: GetKehadiranByPembimbingUserId :many
+SELECT
+    k.id,
+    u.id AS user_id,
+    u.nama,
+    k.tgl_kehadiran
+FROM kehadiran k
+JOIN users u ON u.id = k.user_id
+WHERE k.is_active = true
+  AND (sqlc.narg('pembimbing_klinik')::uuid IS NULL OR k.pembimbing_klinik = sqlc.narg('pembimbing_klinik')::uuid)
+  AND (sqlc.narg('user_id')::uuid IS NULL OR k.user_id = sqlc.narg('user_id')::uuid)
+  AND k.status IS NULL
+ORDER BY k.tgl_kehadiran DESC;
