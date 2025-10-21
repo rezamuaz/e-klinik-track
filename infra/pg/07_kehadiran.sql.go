@@ -13,7 +13,7 @@ import (
 )
 
 const checkKehadiran = `-- name: CheckKehadiran :one
-SELECT id,created_at
+SELECT id,created_at,presensi
 FROM kehadiran
 WHERE tgl_kehadiran = (
     CURRENT_DATE AT TIME ZONE 'Asia/Jakarta'
@@ -25,12 +25,13 @@ AND is_active = TRUE
 type CheckKehadiranRow struct {
 	ID        uuid.UUID          `json:"id"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	Presensi  string             `json:"presensi"`
 }
 
 func (q *Queries) CheckKehadiran(ctx context.Context, userID uuid.UUID) (CheckKehadiranRow, error) {
 	row := q.db.QueryRow(ctx, checkKehadiran, userID)
 	var i CheckKehadiranRow
-	err := row.Scan(&i.ID, &i.CreatedAt)
+	err := row.Scan(&i.ID, &i.CreatedAt, &i.Presensi)
 	return i, err
 }
 

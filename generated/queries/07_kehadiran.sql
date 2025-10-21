@@ -73,7 +73,7 @@ SET deleted_at = now(), deleted_by = $2
 WHERE id = $1 AND deleted_at IS NULL;
 
 -- name: CheckKehadiran :one
-SELECT id,created_at
+SELECT id,created_at,presensi
 FROM kehadiran
 WHERE tgl_kehadiran = (
     CURRENT_DATE AT TIME ZONE 'Asia/Jakarta'
