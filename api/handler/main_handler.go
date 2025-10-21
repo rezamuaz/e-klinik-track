@@ -967,3 +967,29 @@ func (h *MainHandlerImpl) GetRekapKehadiranPerFasilitasHarian(c *gin.Context) {
 
 	c.JSON(http.StatusOK, resp.GenerateBaseResponse(res, true, resp.Success))
 }
+
+func (h *MainHandlerImpl) ChartGetHarianSKPPersentase(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	res, err := h.mainUsecase.ChartGetHarianSKPPersentase(ctx)
+
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed get statistik harian", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(res, true, resp.Success))
+}
+
+func (h *MainHandlerImpl) ChartGetHariIniSKPPersentase(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	res, err := h.mainUsecase.ChartGetHariIniSKPPersentase(ctx)
+
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed get statistik harian", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(res, true, resp.Success))
+}

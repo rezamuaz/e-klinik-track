@@ -8,6 +8,7 @@ import (
 	"e-klinik/internal/domain/resp"
 	"e-klinik/pkg"
 	"e-klinik/utils"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -65,19 +66,23 @@ type MainUsecase interface {
 	GetRekapKehadiranGlobalHarian(c context.Context) (any, error)
 	GetRekapSKPGlobalHarian(c context.Context) (any, error)
 	GetRekapKehadiranPerFasilitasHarian(c context.Context) (any, error)
+	ChartGetHarianSKPPersentase(c context.Context) (any, error)
+	ChartGetHariIniSKPPersentase(c context.Context) (any, error)
 }
 
 type MainUsecaseImpl struct {
 	worker *worker.ProducerService
 	db     *pg.Queries
 	pg     *pkg.Postgres
+	cache  *pkg.RedisCache
 }
 
-func NewMainUsecase(postgre *pkg.Postgres, worker *worker.ProducerService) *MainUsecaseImpl {
+func NewMainUsecase(postgre *pkg.Postgres, worker *worker.ProducerService, cache *pkg.RedisCache) *MainUsecaseImpl {
 	return &MainUsecaseImpl{
 		db:     pg.New(postgre.Pool),
 		pg:     postgre,
 		worker: worker,
+		cache:  cache,
 	}
 }
 
@@ -783,6 +788,7 @@ func (mu *MainUsecaseImpl) ApproveSkpKehadiran(c context.Context, arg request.Ap
 		a := pg.ApproveKehadiranSkpByIdsParams{
 			UpdatedBy:      arg.UpdatedBy,
 			SkpKehadiranID: arg.SkpKehadiranID,
+			KehadiranID:    arg.KehadiranID,
 		}
 		err = qtx.ApproveKehadiranSkpByIds(c, a)
 		if err != nil {
@@ -810,9 +816,31 @@ func (mu *MainUsecaseImpl) GetRekapKehadiranGlobalHarian(c context.Context) (any
 		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get jakarta time")
 	}
 	jktDate := pgtype.Date{Valid: true, Time: tgl}
+
+	// 2️⃣ Buat cache key unik berdasarkan tanggal
+	cacheKey := fmt.Sprintf("rekap:kehadiran:global:harian:%s", tgl.Format("2006-01-02"))
+
+	// 3️⃣ Coba ambil dari Redis
+	if mu.cache != nil {
+		if cached, err := mu.cache.GetRaw(c, cacheKey); err == nil && cached != "" {
+			var data any
+			if err := json.Unmarshal([]byte(cached), &data); err == nil {
+				return resp.WithPaginate(data, nil), nil
+			}
+		}
+	}
 	res, err := mu.db.GetRekapGlobalHarian(c, jktDate)
 	if err != nil {
 		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get kehadiran")
+	}
+	// 5️⃣ Simpan ke Redis selama 5 menit
+	if mu.cache != nil {
+		go func() {
+			// marshal json supaya ringan
+
+			_ = mu.cache.SetWithTTL(context.Background(), cacheKey, res, 5*time.Minute)
+
+		}()
 	}
 
 	return resp.WithPaginate(res, nil), nil
@@ -824,9 +852,30 @@ func (mu *MainUsecaseImpl) GetRekapSKPGlobalHarian(c context.Context) (any, erro
 		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get jakarta time")
 	}
 	jktDate := pgtype.Date{Valid: true, Time: tgl}
+	// 2️⃣ Buat cache key unik berdasarkan tanggal
+	cacheKey := fmt.Sprintf("rekap:skp:global:harian:%s", tgl.Format("2006-01-02"))
+
+	// 3️⃣ Coba ambil dari Redis
+	if mu.cache != nil {
+		if cached, err := mu.cache.GetRaw(c, cacheKey); err == nil && cached != "" {
+			var data any
+			if err := json.Unmarshal([]byte(cached), &data); err == nil {
+				return resp.WithPaginate(data, nil), nil
+			}
+		}
+	}
 	res, err := mu.db.GetRekapSKPHarian(c, jktDate)
 	if err != nil {
 		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get kehadiran")
+	}
+	// 5️⃣ Simpan ke Redis selama 5 menit
+	if mu.cache != nil {
+		go func() {
+			// marshal json supaya ringan
+
+			_ = mu.cache.SetWithTTL(context.Background(), cacheKey, res, 5*time.Minute)
+
+		}()
 	}
 
 	return resp.WithPaginate(res, nil), nil
@@ -838,9 +887,98 @@ func (mu *MainUsecaseImpl) GetRekapKehadiranPerFasilitasHarian(c context.Context
 		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get jakarta time")
 	}
 	jktDate := pgtype.Date{Valid: true, Time: tgl}
+	cacheKey := fmt.Sprintf("rekap:kehadiran:fasilitas:harian:%s", tgl.Format("2006-01-02"))
+
+	// 3️⃣ Coba ambil dari Redis
+	if mu.cache != nil {
+		if cached, err := mu.cache.GetRaw(c, cacheKey); err == nil && cached != "" {
+			var data any
+			if err := json.Unmarshal([]byte(cached), &data); err == nil {
+				return resp.WithPaginate(data, nil), nil
+			}
+		}
+	}
 	res, err := mu.db.GetRekapKehadiranPerFasilitasHarian(c, jktDate)
 	if err != nil {
 		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get kehadiran")
+	}
+	// 5️⃣ Simpan ke Redis selama 5 menit
+	if mu.cache != nil {
+		go func() {
+			// marshal json supaya ringan
+
+			_ = mu.cache.SetWithTTL(context.Background(), cacheKey, res, 5*time.Minute)
+
+		}()
+	}
+
+	return resp.WithPaginate(res, nil), nil
+}
+
+func (mu *MainUsecaseImpl) ChartGetHarianSKPPersentase(c context.Context) (any, error) {
+	tgl, err := utils.GetJakartaDateObject()
+	if err != nil {
+		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get jakarta time")
+	}
+	jktDate := pgtype.Date{Valid: true, Time: tgl}
+	cacheKey := fmt.Sprintf("rekap:skp:7:harian:%s", tgl.Format("2006-01-02"))
+
+	// 3️⃣ Coba ambil dari Redis
+	if mu.cache != nil {
+		if cached, err := mu.cache.GetRaw(c, cacheKey); err == nil && cached != "" {
+			var data any
+			if err := json.Unmarshal([]byte(cached), &data); err == nil {
+				return resp.WithPaginate(data, nil), nil
+			}
+		}
+	}
+	res, err := mu.db.GetCapaianSKP7HariTerakhir(c, jktDate)
+	if err != nil {
+		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get kehadiran")
+	}
+	// 5️⃣ Simpan ke Redis selama 5 menit
+	if mu.cache != nil {
+		go func() {
+			// marshal json supaya ringan
+
+			_ = mu.cache.SetWithTTL(context.Background(), cacheKey, res, 5*time.Minute)
+
+		}()
+	}
+
+	return resp.WithPaginate(res, nil), nil
+}
+
+func (mu *MainUsecaseImpl) ChartGetHariIniSKPPersentase(c context.Context) (any, error) {
+	tgl, err := utils.GetJakartaDateObject()
+	if err != nil {
+		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get jakarta time")
+	}
+
+	jktDate := pgtype.Date{Valid: true, Time: tgl}
+	cacheKey := fmt.Sprintf("rekap:global:harian:%s", tgl.Format("2006-01-02"))
+
+	// 3️⃣ Coba ambil dari Redis
+	if mu.cache != nil {
+		if cached, err := mu.cache.GetRaw(c, cacheKey); err == nil && cached != "" {
+			var data any
+			if err := json.Unmarshal([]byte(cached), &data); err == nil {
+				return resp.WithPaginate(data, nil), nil
+			}
+		}
+	}
+	res, err := mu.db.GetCapaianSKPPerHari(c, pg.GetCapaianSKPPerHariParams{StartDate: jktDate, EndDate: jktDate})
+	if err != nil {
+		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get kehadiran")
+	}
+	// 5️⃣ Simpan ke Redis selama 5 menit
+	if mu.cache != nil {
+		go func() {
+			// marshal json supaya ringan
+
+			_ = mu.cache.SetWithTTL(context.Background(), cacheKey, res, 5*time.Minute)
+
+		}()
 	}
 
 	return resp.WithPaginate(res, nil), nil

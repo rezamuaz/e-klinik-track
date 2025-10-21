@@ -53,6 +53,7 @@ func Main(group *gin.RouterGroup, h *handler.MainHandlerImpl) {
 	group.PUT("/kehadiran_skp", h.UpdateKehadiranSkp)
 	group.DELETE("/kehadiran_skp", h.DeleteKehadiranSkp)
 	group.POST("/kehadiran_skp/approve", h.ApproveKehadiranSkp)
+
 	//SKP
 	group.GET("/intervensi", h.ListIntervensi)
 	group.GET("/users/roles", h.GetUsersByRoles)
@@ -63,5 +64,7 @@ func Main(group *gin.RouterGroup, h *handler.MainHandlerImpl) {
 	group.GET("/rekap/kehadiran/global", h.GetRekapKehadiranGlobalHarian)
 	group.GET("/rekap/kehadiran/fasilitas", h.GetRekapKehadiranPerFasilitasHarian)
 	group.GET("/rekap/skp/global", h.GetRekapSKPGlobalHarian)
+	group.GET("/rekap/skp/harian", h.ChartGetHarianSKPPersentase)
+	group.GET("/rekap/skp/hariini", h.ChartGetHariIniSKPPersentase)
 
 }

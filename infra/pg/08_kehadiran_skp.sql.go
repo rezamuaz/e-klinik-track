@@ -13,24 +13,30 @@ import (
 )
 
 const approveKehadiranSkpByIds = `-- name: ApproveKehadiranSkpByIds :exec
-UPDATE public.kehadiran_skp
+UPDATE public.kehadiran_skp ks
 SET
-  status = 'disetujui',
+  status = CASE
+    WHEN ks.id = ANY($1::uuid[])
+      THEN 'disetujui'
+    ELSE 'ditolak'
+  END,
   locked = TRUE,
   updated_at = now(),
-  updated_by = $1 -- Parameter opsional untuk menyimpan siapa yang melakukan update (misalnya user_id atau username)
+  updated_by = $2
 WHERE
-  id = ANY ($2::uuid[]) -- $1 adalah list UUID yang Anda masukkan
-  AND deleted_at IS NULL
+  ks.kehadiran_id = $3::uuid
+  AND ks.deleted_at IS NULL
+  AND ks.is_active = TRUE
 `
 
 type ApproveKehadiranSkpByIdsParams struct {
-	UpdatedBy      *string     `json:"updated_by"`
 	SkpKehadiranID []uuid.UUID `json:"skp_kehadiran_id"`
+	UpdatedBy      *string     `json:"updated_by"`
+	KehadiranID    uuid.UUID   `json:"kehadiran_id"`
 }
 
 func (q *Queries) ApproveKehadiranSkpByIds(ctx context.Context, arg ApproveKehadiranSkpByIdsParams) error {
-	_, err := q.db.Exec(ctx, approveKehadiranSkpByIds, arg.UpdatedBy, arg.SkpKehadiranID)
+	_, err := q.db.Exec(ctx, approveKehadiranSkpByIds, arg.SkpKehadiranID, arg.UpdatedBy, arg.KehadiranID)
 	return err
 }
 
@@ -79,6 +85,201 @@ type DeleteKehadiranSkpParams struct {
 func (q *Queries) DeleteKehadiranSkp(ctx context.Context, arg DeleteKehadiranSkpParams) error {
 	_, err := q.db.Exec(ctx, deleteKehadiranSkp, arg.ID, arg.DeletedBy)
 	return err
+}
+
+const getCapaianSKP7HariTerakhir = `-- name: GetCapaianSKP7HariTerakhir :many
+WITH date_series AS (
+  SELECT generate_series(
+    ($1::date - INTERVAL '6 day'),
+    $1::date,
+    INTERVAL '1 day'
+  )::date AS tanggal
+),
+rekap AS (
+  SELECT
+    k.tgl_kehadiran::date AS tanggal,
+    COUNT(ks.id) AS total_skp,
+    COUNT(*) FILTER (WHERE (ks.status = 'verified' OR ks.locked = TRUE)) AS diverifikasi,
+    COUNT(*) FILTER (WHERE ks.status = 'rejected') AS ditolak,
+    COUNT(*) FILTER (
+      WHERE ks.status IS NULL OR ks.status NOT IN ('verified', 'rejected')
+    ) AS belum_diverifikasi
+  FROM kehadiran_skp ks
+  JOIN kehadiran k ON k.id = ks.kehadiran_id
+  WHERE ks.is_active = TRUE
+    AND k.is_active = TRUE
+    AND k.tgl_kehadiran BETWEEN ($1::date - INTERVAL '6 day') AND $1::date
+  GROUP BY k.tgl_kehadiran
+)
+SELECT
+  ds.tanggal,
+  COALESCE(r.total_skp, 0) AS total_skp,
+  COALESCE(r.diverifikasi, 0) AS diverifikasi,
+  COALESCE(r.ditolak, 0) AS ditolak,
+  COALESCE(r.belum_diverifikasi, 0) AS belum_diverifikasi,
+  ROUND(
+    (COALESCE(r.diverifikasi, 0)::numeric / NULLIF(r.total_skp, 0)) * 100,
+    2
+  ) AS persentase_diverifikasi
+FROM date_series ds
+LEFT JOIN rekap r ON r.tanggal = ds.tanggal
+ORDER BY ds.tanggal ASC
+`
+
+type GetCapaianSKP7HariTerakhirRow struct {
+	Tanggal                pgtype.Date    `json:"tanggal"`
+	TotalSkp               int64          `json:"total_skp"`
+	Diverifikasi           int64          `json:"diverifikasi"`
+	Ditolak                int64          `json:"ditolak"`
+	BelumDiverifikasi      int64          `json:"belum_diverifikasi"`
+	PersentaseDiverifikasi pgtype.Numeric `json:"persentase_diverifikasi"`
+}
+
+func (q *Queries) GetCapaianSKP7HariTerakhir(ctx context.Context, tgl pgtype.Date) ([]GetCapaianSKP7HariTerakhirRow, error) {
+	rows, err := q.db.Query(ctx, getCapaianSKP7HariTerakhir, tgl)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetCapaianSKP7HariTerakhirRow{}
+	for rows.Next() {
+		var i GetCapaianSKP7HariTerakhirRow
+		if err := rows.Scan(
+			&i.Tanggal,
+			&i.TotalSkp,
+			&i.Diverifikasi,
+			&i.Ditolak,
+			&i.BelumDiverifikasi,
+			&i.PersentaseDiverifikasi,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getCapaianSKPPerHari = `-- name: GetCapaianSKPPerHari :many
+SELECT
+  k.tgl_kehadiran::date AS tanggal,
+  COUNT(ks.id) AS total_skp,
+  COUNT(*) FILTER (WHERE (ks.status = 'disetujui' OR ks.locked = TRUE)) AS diverifikasi,
+  COUNT(*) FILTER (WHERE ks.status = 'ditolak') AS ditolak,
+  COUNT(*) FILTER (
+    WHERE ks.status IS NULL OR ks.status NOT IN ('disetujui', 'ditolak')
+  ) AS belum_diverifikasi,
+  ROUND(
+    (COUNT(*) FILTER (WHERE (ks.status = 'disetujui' OR ks.locked = TRUE))::numeric
+      / NULLIF(COUNT(ks.id), 0)) * 100,
+    2
+  ) AS persentase_diverifikasi
+FROM kehadiran_skp ks
+JOIN kehadiran k ON k.id = ks.kehadiran_id
+WHERE ks.is_active = TRUE
+  AND k.is_active = TRUE
+  AND k.tgl_kehadiran BETWEEN $1::date AND $2::date
+GROUP BY k.tgl_kehadiran
+ORDER BY k.tgl_kehadiran ASC
+`
+
+type GetCapaianSKPPerHariParams struct {
+	StartDate pgtype.Date `json:"start_date"`
+	EndDate   pgtype.Date `json:"end_date"`
+}
+
+type GetCapaianSKPPerHariRow struct {
+	Tanggal                pgtype.Date    `json:"tanggal"`
+	TotalSkp               int64          `json:"total_skp"`
+	Diverifikasi           int64          `json:"diverifikasi"`
+	Ditolak                int64          `json:"ditolak"`
+	BelumDiverifikasi      int64          `json:"belum_diverifikasi"`
+	PersentaseDiverifikasi pgtype.Numeric `json:"persentase_diverifikasi"`
+}
+
+func (q *Queries) GetCapaianSKPPerHari(ctx context.Context, arg GetCapaianSKPPerHariParams) ([]GetCapaianSKPPerHariRow, error) {
+	rows, err := q.db.Query(ctx, getCapaianSKPPerHari, arg.StartDate, arg.EndDate)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetCapaianSKPPerHariRow{}
+	for rows.Next() {
+		var i GetCapaianSKPPerHariRow
+		if err := rows.Scan(
+			&i.Tanggal,
+			&i.TotalSkp,
+			&i.Diverifikasi,
+			&i.Ditolak,
+			&i.BelumDiverifikasi,
+			&i.PersentaseDiverifikasi,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getGlobalSKPPersentase = `-- name: GetGlobalSKPPersentase :many
+WITH Total AS (
+  SELECT COUNT(*) AS total
+  FROM kehadiran_skp ks
+  JOIN kehadiran k ON k.id = ks.kehadiran_id
+  WHERE ks.is_active = TRUE
+    AND k.is_active = TRUE
+    AND k.tgl_kehadiran BETWEEN ($1::date - INTERVAL '6 day') AND $1::date
+)
+SELECT
+  CASE
+    WHEN (ks.status = 'verified' OR ks.locked = TRUE) THEN 'Diverifikasi'
+    WHEN ks.status = 'rejected' THEN 'Ditolak'
+    ELSE 'Belum Diverifikasi'
+  END AS kategori,
+  COUNT(*) AS jumlah,
+  ROUND(
+    (COUNT(*)::numeric / NULLIF(t.total, 0)) * 100,
+    2
+  ) AS persentase
+FROM kehadiran_skp ks
+JOIN kehadiran k ON k.id = ks.kehadiran_id
+CROSS JOIN Total t
+WHERE ks.is_active = TRUE
+  AND k.is_active = TRUE
+  AND k.tgl_kehadiran BETWEEN ($1::date - INTERVAL '6 day') AND $1::date
+GROUP BY kategori, t.total
+ORDER BY persentase DESC
+`
+
+type GetGlobalSKPPersentaseRow struct {
+	Kategori   string         `json:"kategori"`
+	Jumlah     int64          `json:"jumlah"`
+	Persentase pgtype.Numeric `json:"persentase"`
+}
+
+func (q *Queries) GetGlobalSKPPersentase(ctx context.Context, tgl pgtype.Date) ([]GetGlobalSKPPersentaseRow, error) {
+	rows, err := q.db.Query(ctx, getGlobalSKPPersentase, tgl)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetGlobalSKPPersentaseRow{}
+	for rows.Next() {
+		var i GetGlobalSKPPersentaseRow
+		if err := rows.Scan(&i.Kategori, &i.Jumlah, &i.Persentase); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getKehadiranSkp = `-- name: GetKehadiranSkp :one

@@ -139,15 +139,20 @@ WHERE
 ORDER BY ks.created_at DESC;
 
 -- name: ApproveKehadiranSkpByIds :exec
-UPDATE public.kehadiran_skp
+UPDATE public.kehadiran_skp ks
 SET
-  status = 'disetujui',
+  status = CASE
+    WHEN ks.id = ANY(sqlc.arg('skp_kehadiran_id')::uuid[])
+      THEN 'disetujui'
+    ELSE 'ditolak'
+  END,
   locked = TRUE,
   updated_at = now(),
-  updated_by = $1 -- Parameter opsional untuk menyimpan siapa yang melakukan update (misalnya user_id atau username)
+  updated_by = sqlc.arg('updated_by')
 WHERE
-  id = ANY (sqlc.arg('skp_kehadiran_id')::uuid[]) -- $1 adalah list UUID yang Anda masukkan
-  AND deleted_at IS NULL;
+  ks.kehadiran_id = sqlc.arg('kehadiran_id')::uuid
+  AND ks.deleted_at IS NULL
+  AND ks.is_active = TRUE;
 
 -- name: GetRekapSKPHarian :one
 WITH DataSKP AS (
@@ -170,3 +175,100 @@ SELECT
     2
   ) AS persentase_selesai
 FROM DataSKP ds;
+
+
+
+-- name: GetGlobalSKPPersentase :many
+WITH Total AS (
+  SELECT COUNT(*) AS total
+  FROM kehadiran_skp ks
+  JOIN kehadiran k ON k.id = ks.kehadiran_id
+  WHERE ks.is_active = TRUE
+    AND k.is_active = TRUE
+    AND k.tgl_kehadiran BETWEEN (sqlc.arg('tgl')::date - INTERVAL '6 day') AND sqlc.arg('tgl')::date
+)
+SELECT
+  CASE
+    WHEN (ks.status = 'verified' OR ks.locked = TRUE) THEN 'Diverifikasi'
+    WHEN ks.status = 'rejected' THEN 'Ditolak'
+    ELSE 'Belum Diverifikasi'
+  END AS kategori,
+  COUNT(*) AS jumlah,
+  ROUND(
+    (COUNT(*)::numeric / NULLIF(t.total, 0)) * 100,
+    2
+  ) AS persentase
+FROM kehadiran_skp ks
+JOIN kehadiran k ON k.id = ks.kehadiran_id
+CROSS JOIN Total t
+WHERE ks.is_active = TRUE
+  AND k.is_active = TRUE
+  AND k.tgl_kehadiran BETWEEN (sqlc.arg('tgl')::date - INTERVAL '6 day') AND sqlc.arg('tgl')::date
+GROUP BY kategori, t.total
+ORDER BY persentase DESC;
+
+
+-- name: GetCapaianSKP7HariTerakhir :many
+WITH date_series AS (
+  SELECT generate_series(
+    (sqlc.arg('tgl')::date - INTERVAL '6 day'),
+    sqlc.arg('tgl')::date,
+    INTERVAL '1 day'
+  )::date AS tanggal
+),
+rekap AS (
+  SELECT
+    k.tgl_kehadiran::date AS tanggal,
+    COUNT(ks.id) AS total_skp,
+    COUNT(*) FILTER (WHERE (ks.status = 'verified' OR ks.locked = TRUE)) AS diverifikasi,
+    COUNT(*) FILTER (WHERE ks.status = 'rejected') AS ditolak,
+    COUNT(*) FILTER (
+      WHERE ks.status IS NULL OR ks.status NOT IN ('verified', 'rejected')
+    ) AS belum_diverifikasi
+  FROM kehadiran_skp ks
+  JOIN kehadiran k ON k.id = ks.kehadiran_id
+  WHERE ks.is_active = TRUE
+    AND k.is_active = TRUE
+    AND k.tgl_kehadiran BETWEEN (sqlc.arg('tgl')::date - INTERVAL '6 day') AND sqlc.arg('tgl')::date
+  GROUP BY k.tgl_kehadiran
+)
+SELECT
+  ds.tanggal,
+  COALESCE(r.total_skp, 0) AS total_skp,
+  COALESCE(r.diverifikasi, 0) AS diverifikasi,
+  COALESCE(r.ditolak, 0) AS ditolak,
+  COALESCE(r.belum_diverifikasi, 0) AS belum_diverifikasi,
+  ROUND(
+    (COALESCE(r.diverifikasi, 0)::numeric / NULLIF(r.total_skp, 0)) * 100,
+    2
+  ) AS persentase_diverifikasi
+FROM date_series ds
+LEFT JOIN rekap r ON r.tanggal = ds.tanggal
+ORDER BY ds.tanggal ASC;
+
+
+-- name: GetCapaianSKPPerHari :many
+SELECT
+  k.tgl_kehadiran::date AS tanggal,
+  COUNT(ks.id) AS total_skp,
+  COUNT(*) FILTER (WHERE (ks.status = 'disetujui' OR ks.locked = TRUE)) AS diverifikasi,
+  COUNT(*) FILTER (WHERE ks.status = 'ditolak') AS ditolak,
+  COUNT(*) FILTER (
+    WHERE ks.status IS NULL OR ks.status NOT IN ('disetujui', 'ditolak')
+  ) AS belum_diverifikasi,
+  ROUND(
+    (COUNT(*) FILTER (WHERE (ks.status = 'disetujui' OR ks.locked = TRUE))::numeric
+      / NULLIF(COUNT(ks.id), 0)) * 100,
+    2
+  ) AS persentase_diverifikasi
+FROM kehadiran_skp ks
+JOIN kehadiran k ON k.id = ks.kehadiran_id
+WHERE ks.is_active = TRUE
+  AND k.is_active = TRUE
+  AND k.tgl_kehadiran BETWEEN sqlc.arg('start_date')::date AND sqlc.arg('end_date')::date
+GROUP BY k.tgl_kehadiran
+ORDER BY k.tgl_kehadiran ASC;
+
+
+
+

@@ -25,7 +25,7 @@ func Injector(cfg *config.Config, ch *amqp.Channel, pg *pkg.Postgres, cache *pkg
 	userUsecaseImpl := usecase.NewUserUsecase(pg, cfg, cache, casbin2)
 	authHandlerImpl := handler.NewAuthHandler(userUsecaseImpl, cfg)
 	producerService := worker.NewQueueService(ch)
-	mainUsecaseImpl := usecase.NewMainUsecase(pg, producerService)
+	mainUsecaseImpl := usecase.NewMainUsecase(pg, producerService, cache)
 	mainHandlerImpl := handler.NewMainHandler(mainUsecaseImpl, cfg)
 	initialized := &api.Initialized{
 		AuthHandler: authHandlerImpl,
