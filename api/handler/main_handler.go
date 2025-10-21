@@ -930,3 +930,40 @@ func (h *MainHandlerImpl) ApproveKehadiranSkp(c *gin.Context) {
 
 	c.JSON(http.StatusOK, resp.GenerateBaseResponse(res, true, resp.Success))
 }
+
+func (h *MainHandlerImpl) GetRekapKehadiranGlobalHarian(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	res, err := h.mainUsecase.GetRekapKehadiranGlobalHarian(ctx)
+
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed get statistik harian", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(res, true, resp.Success))
+}
+func (h *MainHandlerImpl) GetRekapSKPGlobalHarian(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	res, err := h.mainUsecase.GetRekapSKPGlobalHarian(ctx)
+
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed get statistik harian", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(res, true, resp.Success))
+}
+func (h *MainHandlerImpl) GetRekapKehadiranPerFasilitasHarian(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	res, err := h.mainUsecase.GetRekapKehadiranPerFasilitasHarian(ctx)
+
+	if err != nil {
+		resp.GenerateBaseResponseWithError(c, "failed get statistik harian", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, resp.GenerateBaseResponse(res, true, resp.Success))
+}

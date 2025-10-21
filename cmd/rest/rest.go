@@ -78,6 +78,8 @@ func HttpServer(cfg *config.Config, rmq *pkg.RabbitMQ, pg *pkg.Postgres) {
 	if err != nil {
 		log.Fatalf("Failed to load policy: %v", err)
 	}
+	casbin.EnableAutoSave(true)
+	casbin.EnableLog(true)
 
 	//Initialize redis
 	rdb := pkg.NewRedisCache(cfg)

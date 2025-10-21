@@ -62,6 +62,9 @@ type MainUsecase interface {
 	IntervensiByKehadiranId(c context.Context, arg uuid.UUID) (any, error)
 	ApproveSkpKehadiran(c context.Context, arg request.ApproveKehadiranSkp) (any, error)
 	GetKehadiranByMahasiswaStatus(c context.Context, arg pg.GetKehadiranByPembimbingUserIdParams) (any, error)
+	GetRekapKehadiranGlobalHarian(c context.Context) (any, error)
+	GetRekapSKPGlobalHarian(c context.Context) (any, error)
+	GetRekapKehadiranPerFasilitasHarian(c context.Context) (any, error)
 }
 
 type MainUsecaseImpl struct {
@@ -798,5 +801,47 @@ func (mu *MainUsecaseImpl) GetKehadiranByMahasiswaStatus(c context.Context, arg 
 	if len(res) == 0 {
 		return resp.WithPaginate([]string{}, nil), err
 	}
+	return resp.WithPaginate(res, nil), nil
+}
+
+func (mu *MainUsecaseImpl) GetRekapKehadiranGlobalHarian(c context.Context) (any, error) {
+	tgl, err := utils.GetJakartaDateObject()
+	if err != nil {
+		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get jakarta time")
+	}
+	jktDate := pgtype.Date{Valid: true, Time: tgl}
+	res, err := mu.db.GetRekapGlobalHarian(c, jktDate)
+	if err != nil {
+		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get kehadiran")
+	}
+
+	return resp.WithPaginate(res, nil), nil
+}
+
+func (mu *MainUsecaseImpl) GetRekapSKPGlobalHarian(c context.Context) (any, error) {
+	tgl, err := utils.GetJakartaDateObject()
+	if err != nil {
+		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get jakarta time")
+	}
+	jktDate := pgtype.Date{Valid: true, Time: tgl}
+	res, err := mu.db.GetRekapSKPHarian(c, jktDate)
+	if err != nil {
+		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get kehadiran")
+	}
+
+	return resp.WithPaginate(res, nil), nil
+}
+
+func (mu *MainUsecaseImpl) GetRekapKehadiranPerFasilitasHarian(c context.Context) (any, error) {
+	tgl, err := utils.GetJakartaDateObject()
+	if err != nil {
+		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get jakarta time")
+	}
+	jktDate := pgtype.Date{Valid: true, Time: tgl}
+	res, err := mu.db.GetRekapKehadiranPerFasilitasHarian(c, jktDate)
+	if err != nil {
+		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get kehadiran")
+	}
+
 	return resp.WithPaginate(res, nil), nil
 }

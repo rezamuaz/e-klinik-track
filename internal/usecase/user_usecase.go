@@ -766,10 +766,6 @@ func (uu *UserUsecaseImpl) AddRolePolicy(c context.Context, arg request.UpdateRo
 			}
 		}
 
-		// 3️⃣ Simpan ke storage Casbin
-		if err := uu.cbn.SavePolicy(); err != nil {
-			return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed save casbin policy")
-		}
 		return resp.WithPaginate(map[string]any{
 			"role_id":          arg.RoleID,
 			"total_ids":        len(allIDs),

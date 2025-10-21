@@ -59,5 +59,9 @@ func Main(group *gin.RouterGroup, h *handler.MainHandlerImpl) {
 	//Pembimbing Klinik
 	group.POST("/pembimbing_klinik", h.CreatePembimbingKlinik)
 	group.GET("/pembimbing_klinik/kontrak/:id", h.ListPembimbingKlinikByKontrak)
+	//Rekap
+	group.GET("/rekap/kehadiran/global", h.GetRekapKehadiranGlobalHarian)
+	group.GET("/rekap/kehadiran/fasilitas", h.GetRekapKehadiranPerFasilitasHarian)
+	group.GET("/rekap/skp/global", h.GetRekapSKPGlobalHarian)
 
 }

@@ -149,3 +149,24 @@ WHERE
   id = ANY (sqlc.arg('skp_kehadiran_id')::uuid[]) -- $1 adalah list UUID yang Anda masukkan
   AND deleted_at IS NULL;
 
+-- name: GetRekapSKPHarian :one
+WITH DataSKP AS (
+  SELECT
+    COUNT(*) AS total_kompetensi,
+    COUNT(*) FILTER (
+      WHERE (ks.status = 'verified' OR ks.locked = TRUE)
+    ) AS diverifikasi
+  FROM kehadiran_skp ks
+  JOIN kehadiran k ON k.id = ks.kehadiran_id
+  WHERE k.tgl_kehadiran = sqlc.arg('tgl')
+    AND ks.is_active = TRUE
+    AND k.is_active = TRUE
+)
+SELECT
+  COALESCE(ds.total_kompetensi, 0) AS total_kompetensi_dicatat,
+  COALESCE(ds.diverifikasi, 0) AS sudah_diverifikasi_pembimbing,
+  ROUND(
+    (COALESCE(ds.diverifikasi, 0)::numeric / NULLIF(ds.total_kompetensi, 0)) * 100,
+    2
+  ) AS persentase_selesai
+FROM DataSKP ds;

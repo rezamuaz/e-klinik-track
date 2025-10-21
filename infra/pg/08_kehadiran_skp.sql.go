@@ -110,6 +110,42 @@ func (q *Queries) GetKehadiranSkp(ctx context.Context, id uuid.UUID) (KehadiranS
 	return i, err
 }
 
+const getRekapSKPHarian = `-- name: GetRekapSKPHarian :one
+WITH DataSKP AS (
+  SELECT
+    COUNT(*) AS total_kompetensi,
+    COUNT(*) FILTER (
+      WHERE (ks.status = 'verified' OR ks.locked = TRUE)
+    ) AS diverifikasi
+  FROM kehadiran_skp ks
+  JOIN kehadiran k ON k.id = ks.kehadiran_id
+  WHERE k.tgl_kehadiran = $1
+    AND ks.is_active = TRUE
+    AND k.is_active = TRUE
+)
+SELECT
+  COALESCE(ds.total_kompetensi, 0) AS total_kompetensi_dicatat,
+  COALESCE(ds.diverifikasi, 0) AS sudah_diverifikasi_pembimbing,
+  ROUND(
+    (COALESCE(ds.diverifikasi, 0)::numeric / NULLIF(ds.total_kompetensi, 0)) * 100,
+    2
+  ) AS persentase_selesai
+FROM DataSKP ds
+`
+
+type GetRekapSKPHarianRow struct {
+	TotalKompetensiDicatat      int64          `json:"total_kompetensi_dicatat"`
+	SudahDiverifikasiPembimbing int64          `json:"sudah_diverifikasi_pembimbing"`
+	PersentaseSelesai           pgtype.Numeric `json:"persentase_selesai"`
+}
+
+func (q *Queries) GetRekapSKPHarian(ctx context.Context, tgl pgtype.Date) (GetRekapSKPHarianRow, error) {
+	row := q.db.QueryRow(ctx, getRekapSKPHarian, tgl)
+	var i GetRekapSKPHarianRow
+	err := row.Scan(&i.TotalKompetensiDicatat, &i.SudahDiverifikasiPembimbing, &i.PersentaseSelesai)
+	return i, err
+}
+
 const intervensiKehadiranID = `-- name: IntervensiKehadiranID :many
 SELECT
 ks.id,

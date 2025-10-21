@@ -194,6 +194,7 @@ WHERE k.is_active = true
   AND ($1::uuid IS NULL OR k.pembimbing_klinik = $1::uuid)
   AND ($2::uuid IS NULL OR k.user_id = $2::uuid)
   AND k.status IS NULL
+  AND k.presensi = 'hadir'
 ORDER BY k.tgl_kehadiran DESC
 `
 
@@ -223,6 +224,426 @@ func (q *Queries) GetKehadiranByPembimbingUserId(ctx context.Context, arg GetKeh
 			&i.UserID,
 			&i.Nama,
 			&i.TglKehadiran,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getMahasiswaTidakHadir = `-- name: GetMahasiswaTidakHadir :many
+SELECT
+  k.user_id,
+  u.nama AS nama_mahasiswa,
+  r.nama_ruangan,
+  p.nama AS nama_pembimbing,
+  k.presensi,
+  k.status
+FROM kehadiran k
+JOIN users u ON u.id = k.user_id
+JOIN ruangan r ON r.id = k.ruangan_id
+LEFT JOIN users p ON p.id = k.pembimbing_id
+WHERE k.tgl_kehadiran = $1
+  AND k.fasilitas_id = $2
+  AND k.presensi IN ('izin', 'sakit')
+  AND k.is_active = TRUE
+ORDER BY r.nama_ruangan, u.nama
+`
+
+type GetMahasiswaTidakHadirParams struct {
+	TglKehadiran pgtype.Date `json:"tgl_kehadiran"`
+	FasilitasID  uuid.UUID   `json:"fasilitas_id"`
+}
+
+type GetMahasiswaTidakHadirRow struct {
+	UserID         uuid.UUID `json:"user_id"`
+	NamaMahasiswa  string    `json:"nama_mahasiswa"`
+	NamaRuangan    string    `json:"nama_ruangan"`
+	NamaPembimbing *string   `json:"nama_pembimbing"`
+	Presensi       string    `json:"presensi"`
+	Status         *string   `json:"status"`
+}
+
+func (q *Queries) GetMahasiswaTidakHadir(ctx context.Context, arg GetMahasiswaTidakHadirParams) ([]GetMahasiswaTidakHadirRow, error) {
+	rows, err := q.db.Query(ctx, getMahasiswaTidakHadir, arg.TglKehadiran, arg.FasilitasID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetMahasiswaTidakHadirRow{}
+	for rows.Next() {
+		var i GetMahasiswaTidakHadirRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.NamaMahasiswa,
+			&i.NamaRuangan,
+			&i.NamaPembimbing,
+			&i.Presensi,
+			&i.Status,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getRekapDetailFasilitasHarian = `-- name: GetRekapDetailFasilitasHarian :many
+SELECT
+  r.id AS ruangan_id,
+  r.nama_ruangan,
+  COUNT(DISTINCT k.user_id) AS total_mahasiswa,
+  COUNT(*) FILTER (WHERE k.presensi = 'hadir') AS hadir,
+  COUNT(*) FILTER (WHERE k.presensi = 'izin') AS izin,
+  COUNT(*) FILTER (WHERE k.presensi = 'sakit') AS sakit,
+  COUNT(*) FILTER (WHERE k.presensi = 'alpa') AS alpa,
+  ROUND(
+    (COUNT(*) FILTER (WHERE k.presensi = 'hadir')::numeric / NULLIF(COUNT(*), 0)) * 100,
+    2
+  ) AS persentase_hadir
+FROM kehadiran k
+JOIN ruangan r ON r.id = k.ruangan_id
+WHERE k.tgl_kehadiran = $1
+  AND k.fasilitas_id = $2
+  AND k.is_active = TRUE
+GROUP BY r.id, r.nama_ruangan
+ORDER BY r.nama_ruangan
+`
+
+type GetRekapDetailFasilitasHarianParams struct {
+	TglKehadiran pgtype.Date `json:"tgl_kehadiran"`
+	FasilitasID  uuid.UUID   `json:"fasilitas_id"`
+}
+
+type GetRekapDetailFasilitasHarianRow struct {
+	RuanganID       uuid.UUID      `json:"ruangan_id"`
+	NamaRuangan     string         `json:"nama_ruangan"`
+	TotalMahasiswa  int64          `json:"total_mahasiswa"`
+	Hadir           int64          `json:"hadir"`
+	Izin            int64          `json:"izin"`
+	Sakit           int64          `json:"sakit"`
+	Alpa            int64          `json:"alpa"`
+	PersentaseHadir pgtype.Numeric `json:"persentase_hadir"`
+}
+
+func (q *Queries) GetRekapDetailFasilitasHarian(ctx context.Context, arg GetRekapDetailFasilitasHarianParams) ([]GetRekapDetailFasilitasHarianRow, error) {
+	rows, err := q.db.Query(ctx, getRekapDetailFasilitasHarian, arg.TglKehadiran, arg.FasilitasID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetRekapDetailFasilitasHarianRow{}
+	for rows.Next() {
+		var i GetRekapDetailFasilitasHarianRow
+		if err := rows.Scan(
+			&i.RuanganID,
+			&i.NamaRuangan,
+			&i.TotalMahasiswa,
+			&i.Hadir,
+			&i.Izin,
+			&i.Sakit,
+			&i.Alpa,
+			&i.PersentaseHadir,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getRekapGlobalHarian = `-- name: GetRekapGlobalHarian :one
+
+WITH
+TotalData AS (
+  SELECT
+    COUNT(DISTINCT k.user_id) AS total_mahasiswa_unik,
+    COUNT(*) FILTER (WHERE k.presensi = 'hadir') AS hadir,
+    COUNT(*) FILTER (WHERE k.presensi = 'izin') AS izin,
+    COUNT(*) FILTER (WHERE k.presensi = 'sakit') AS sakit
+  FROM kehadiran k
+  WHERE k.tgl_kehadiran = $1
+    AND k.is_active = TRUE
+),
+
+YesterdayData AS (
+  SELECT
+    COUNT(DISTINCT k.user_id) AS total_mahasiswa_unik,
+    COUNT(*) FILTER (WHERE k.presensi = 'hadir') AS hadir,
+    COUNT(*) FILTER (WHERE k.presensi = 'izin') AS izin,
+    COUNT(*) FILTER (WHERE k.presensi = 'sakit') AS sakit
+  FROM kehadiran k
+  WHERE k.tgl_kehadiran = ($1 - INTERVAL '1 day')
+    AND k.is_active = TRUE
+)
+
+SELECT
+  $1::date AS tanggal,
+  COALESCE(td.total_mahasiswa_unik, 0) AS total_mahasiswa,
+  COALESCE(td.hadir, 0) AS hadir,
+  COALESCE(td.izin, 0) AS izin,
+  COALESCE(td.sakit, 0) AS sakit,
+
+  -- Persentase hari ini
+  ROUND((COALESCE(td.hadir, 0)::numeric / NULLIF(td.total_mahasiswa_unik, 0)) * 100, 2) AS persentase_hadir,
+  ROUND((COALESCE(td.izin, 0)::numeric / NULLIF(td.total_mahasiswa_unik, 0)) * 100, 2) AS persentase_izin,
+  ROUND((COALESCE(td.sakit, 0)::numeric / NULLIF(td.total_mahasiswa_unik, 0)) * 100, 2) AS persentase_sakit,
+
+  -- Growth aman
+  CASE
+    WHEN COALESCE(yd.hadir, 0) = 0 AND COALESCE(td.hadir, 0) > 0
+      THEN 100
+    WHEN COALESCE(yd.hadir, 0) = 0 AND COALESCE(td.hadir, 0) = 0
+      THEN 0
+    ELSE ROUND(((td.hadir - yd.hadir)::numeric / yd.hadir) * 100, 2)
+  END AS growth_hadir,
+
+  CASE
+    WHEN COALESCE(yd.izin, 0) = 0 AND COALESCE(td.izin, 0) > 0
+      THEN 100
+    WHEN COALESCE(yd.izin, 0) = 0 AND COALESCE(td.izin, 0) = 0
+      THEN 0
+    ELSE ROUND(((td.izin - yd.izin)::numeric / yd.izin) * 100, 2)
+  END AS growth_izin,
+
+  CASE
+    WHEN COALESCE(yd.sakit, 0) = 0 AND COALESCE(td.sakit, 0) > 0
+      THEN 100
+    WHEN COALESCE(yd.sakit, 0) = 0 AND COALESCE(td.sakit, 0) = 0
+      THEN 0
+    ELSE ROUND(((td.sakit - yd.sakit)::numeric / yd.sakit) * 100, 2)
+  END AS growth_sakit,
+
+  CASE
+    WHEN COALESCE(yd.total_mahasiswa_unik, 0) = 0 AND COALESCE(td.total_mahasiswa_unik, 0) > 0
+      THEN 100
+    WHEN COALESCE(yd.total_mahasiswa_unik, 0) = 0 AND COALESCE(td.total_mahasiswa_unik, 0) = 0
+      THEN 0
+    ELSE ROUND(((td.total_mahasiswa_unik - yd.total_mahasiswa_unik)::numeric / yd.total_mahasiswa_unik) * 100, 2)
+  END AS growth_total_mahasiswa
+
+FROM TotalData td
+LEFT JOIN YesterdayData yd ON TRUE
+`
+
+type GetRekapGlobalHarianRow struct {
+	Tanggal              pgtype.Date    `json:"tanggal"`
+	TotalMahasiswa       int64          `json:"total_mahasiswa"`
+	Hadir                int64          `json:"hadir"`
+	Izin                 int64          `json:"izin"`
+	Sakit                int64          `json:"sakit"`
+	PersentaseHadir      pgtype.Numeric `json:"persentase_hadir"`
+	PersentaseIzin       pgtype.Numeric `json:"persentase_izin"`
+	PersentaseSakit      pgtype.Numeric `json:"persentase_sakit"`
+	GrowthHadir          interface{}    `json:"growth_hadir"`
+	GrowthIzin           interface{}    `json:"growth_izin"`
+	GrowthSakit          interface{}    `json:"growth_sakit"`
+	GrowthTotalMahasiswa interface{}    `json:"growth_total_mahasiswa"`
+}
+
+// ////////////////////////////////////////////////////////////////
+// Data hari ini
+// Data kemarin
+func (q *Queries) GetRekapGlobalHarian(ctx context.Context, tgl pgtype.Date) (GetRekapGlobalHarianRow, error) {
+	row := q.db.QueryRow(ctx, getRekapGlobalHarian, tgl)
+	var i GetRekapGlobalHarianRow
+	err := row.Scan(
+		&i.Tanggal,
+		&i.TotalMahasiswa,
+		&i.Hadir,
+		&i.Izin,
+		&i.Sakit,
+		&i.PersentaseHadir,
+		&i.PersentaseIzin,
+		&i.PersentaseSakit,
+		&i.GrowthHadir,
+		&i.GrowthIzin,
+		&i.GrowthSakit,
+		&i.GrowthTotalMahasiswa,
+	)
+	return i, err
+}
+
+const getRekapKehadiranPerFasilitasHarian = `-- name: GetRekapKehadiranPerFasilitasHarian :many
+SELECT
+  f.id AS fasilitas_id,
+  f.nama AS nama_fasilitas,
+  COUNT(DISTINCT k.user_id) AS total_mahasiswa,
+  COUNT(*) FILTER (WHERE k.presensi = 'hadir') AS hadir,
+  COUNT(*) FILTER (WHERE k.presensi = 'izin') AS izin,
+  COUNT(*) FILTER (WHERE k.presensi = 'sakit') AS sakit,
+  -- COUNT(*) FILTER (WHERE k.presensi = 'alpa') AS alpa,
+  ROUND(
+    (COUNT(*) FILTER (WHERE k.presensi = 'hadir')::numeric / NULLIF(COUNT(*), 0)) * 100,
+    2
+  ) AS persentase_hadir
+FROM kehadiran k
+JOIN fasilitas_kesehatan f ON f.id = k.fasilitas_id
+WHERE k.tgl_kehadiran = $1
+  AND k.is_active = TRUE
+GROUP BY f.id, f.nama
+ORDER BY f.nama
+`
+
+type GetRekapKehadiranPerFasilitasHarianRow struct {
+	FasilitasID     uuid.UUID      `json:"fasilitas_id"`
+	NamaFasilitas   string         `json:"nama_fasilitas"`
+	TotalMahasiswa  int64          `json:"total_mahasiswa"`
+	Hadir           int64          `json:"hadir"`
+	Izin            int64          `json:"izin"`
+	Sakit           int64          `json:"sakit"`
+	PersentaseHadir pgtype.Numeric `json:"persentase_hadir"`
+}
+
+func (q *Queries) GetRekapKehadiranPerFasilitasHarian(ctx context.Context, tglKehadiran pgtype.Date) ([]GetRekapKehadiranPerFasilitasHarianRow, error) {
+	rows, err := q.db.Query(ctx, getRekapKehadiranPerFasilitasHarian, tglKehadiran)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetRekapKehadiranPerFasilitasHarianRow{}
+	for rows.Next() {
+		var i GetRekapKehadiranPerFasilitasHarianRow
+		if err := rows.Scan(
+			&i.FasilitasID,
+			&i.NamaFasilitas,
+			&i.TotalMahasiswa,
+			&i.Hadir,
+			&i.Izin,
+			&i.Sakit,
+			&i.PersentaseHadir,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getRekapPembimbingFasilitasHarian = `-- name: GetRekapPembimbingFasilitasHarian :many
+SELECT
+  u.id AS pembimbing_id,
+  u.nama AS nama_pembimbing,
+  COUNT(DISTINCT k.user_id) AS total_mahasiswa,
+  COUNT(*) FILTER (WHERE k.presensi = 'hadir') AS hadir,
+  ROUND(
+    (COUNT(*) FILTER (WHERE k.presensi = 'hadir')::numeric / NULLIF(COUNT(*), 0)) * 100,
+    2
+  ) AS persentase_hadir
+FROM kehadiran k
+JOIN users u ON u.id = k.pembimbing_id
+WHERE k.tgl_kehadiran = $1
+  AND k.fasilitas_id = $2
+  AND k.is_active = TRUE
+GROUP BY u.id, u.nama
+ORDER BY u.nama
+`
+
+type GetRekapPembimbingFasilitasHarianParams struct {
+	TglKehadiran pgtype.Date `json:"tgl_kehadiran"`
+	FasilitasID  uuid.UUID   `json:"fasilitas_id"`
+}
+
+type GetRekapPembimbingFasilitasHarianRow struct {
+	PembimbingID    uuid.UUID      `json:"pembimbing_id"`
+	NamaPembimbing  string         `json:"nama_pembimbing"`
+	TotalMahasiswa  int64          `json:"total_mahasiswa"`
+	Hadir           int64          `json:"hadir"`
+	PersentaseHadir pgtype.Numeric `json:"persentase_hadir"`
+}
+
+func (q *Queries) GetRekapPembimbingFasilitasHarian(ctx context.Context, arg GetRekapPembimbingFasilitasHarianParams) ([]GetRekapPembimbingFasilitasHarianRow, error) {
+	rows, err := q.db.Query(ctx, getRekapPembimbingFasilitasHarian, arg.TglKehadiran, arg.FasilitasID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetRekapPembimbingFasilitasHarianRow{}
+	for rows.Next() {
+		var i GetRekapPembimbingFasilitasHarianRow
+		if err := rows.Scan(
+			&i.PembimbingID,
+			&i.NamaPembimbing,
+			&i.TotalMahasiswa,
+			&i.Hadir,
+			&i.PersentaseHadir,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getTrenKehadiran7Hari = `-- name: GetTrenKehadiran7Hari :many
+SELECT
+  f.id AS fasilitas_id,
+  f.nama AS nama_fasilitas,
+  k.tgl_kehadiran AS tanggal,
+  COUNT(DISTINCT k.user_id) AS total_mahasiswa,
+  COUNT(*) FILTER (WHERE k.presensi = 'hadir') AS hadir,
+  COUNT(*) FILTER (WHERE k.presensi = 'izin') AS izin,
+  COUNT(*) FILTER (WHERE k.presensi = 'sakit') AS sakit,
+  COUNT(*) FILTER (WHERE k.presensi = 'alpa') AS alpa,
+  ROUND(
+    (COUNT(*) FILTER (WHERE k.presensi = 'hadir')::numeric / NULLIF(COUNT(*), 0)) * 100,
+    2
+  ) AS persentase_hadir
+FROM kehadiran k
+JOIN fasilitas_kesehatan f ON f.id = k.fasilitas_id
+WHERE k.tgl_kehadiran BETWEEN (CURRENT_DATE - INTERVAL '6 days') AND CURRENT_DATE
+  AND k.is_active = TRUE
+GROUP BY f.id, f.nama, k.tgl_kehadiran
+ORDER BY f.nama, k.tgl_kehadiran
+`
+
+type GetTrenKehadiran7HariRow struct {
+	FasilitasID     uuid.UUID      `json:"fasilitas_id"`
+	NamaFasilitas   string         `json:"nama_fasilitas"`
+	Tanggal         pgtype.Date    `json:"tanggal"`
+	TotalMahasiswa  int64          `json:"total_mahasiswa"`
+	Hadir           int64          `json:"hadir"`
+	Izin            int64          `json:"izin"`
+	Sakit           int64          `json:"sakit"`
+	Alpa            int64          `json:"alpa"`
+	PersentaseHadir pgtype.Numeric `json:"persentase_hadir"`
+}
+
+func (q *Queries) GetTrenKehadiran7Hari(ctx context.Context) ([]GetTrenKehadiran7HariRow, error) {
+	rows, err := q.db.Query(ctx, getTrenKehadiran7Hari)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetTrenKehadiran7HariRow{}
+	for rows.Next() {
+		var i GetTrenKehadiran7HariRow
+		if err := rows.Scan(
+			&i.FasilitasID,
+			&i.NamaFasilitas,
+			&i.Tanggal,
+			&i.TotalMahasiswa,
+			&i.Hadir,
+			&i.Izin,
+			&i.Sakit,
+			&i.Alpa,
+			&i.PersentaseHadir,
 		); err != nil {
 			return nil, err
 		}

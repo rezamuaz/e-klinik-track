@@ -121,4 +121,186 @@ WHERE k.is_active = true
   AND (sqlc.narg('pembimbing_klinik')::uuid IS NULL OR k.pembimbing_klinik = sqlc.narg('pembimbing_klinik')::uuid)
   AND (sqlc.narg('user_id')::uuid IS NULL OR k.user_id = sqlc.narg('user_id')::uuid)
   AND k.status IS NULL
+  AND k.presensi = 'hadir'
 ORDER BY k.tgl_kehadiran DESC;
+
+
+--////////////////////////////////////////////////////////////////
+
+-- name: GetRekapGlobalHarian :one
+WITH
+-- Data hari ini
+TotalData AS (
+  SELECT
+    COUNT(DISTINCT k.user_id) AS total_mahasiswa_unik,
+    COUNT(*) FILTER (WHERE k.presensi = 'hadir') AS hadir,
+    COUNT(*) FILTER (WHERE k.presensi = 'izin') AS izin,
+    COUNT(*) FILTER (WHERE k.presensi = 'sakit') AS sakit
+  FROM kehadiran k
+  WHERE k.tgl_kehadiran = sqlc.arg('tgl')
+    AND k.is_active = TRUE
+),
+
+-- Data kemarin
+YesterdayData AS (
+  SELECT
+    COUNT(DISTINCT k.user_id) AS total_mahasiswa_unik,
+    COUNT(*) FILTER (WHERE k.presensi = 'hadir') AS hadir,
+    COUNT(*) FILTER (WHERE k.presensi = 'izin') AS izin,
+    COUNT(*) FILTER (WHERE k.presensi = 'sakit') AS sakit
+  FROM kehadiran k
+  WHERE k.tgl_kehadiran = (sqlc.arg('tgl') - INTERVAL '1 day')
+    AND k.is_active = TRUE
+)
+
+SELECT
+  sqlc.arg('tgl')::date AS tanggal,
+  COALESCE(td.total_mahasiswa_unik, 0) AS total_mahasiswa,
+  COALESCE(td.hadir, 0) AS hadir,
+  COALESCE(td.izin, 0) AS izin,
+  COALESCE(td.sakit, 0) AS sakit,
+
+  -- Persentase hari ini
+  ROUND((COALESCE(td.hadir, 0)::numeric / NULLIF(td.total_mahasiswa_unik, 0)) * 100, 2) AS persentase_hadir,
+  ROUND((COALESCE(td.izin, 0)::numeric / NULLIF(td.total_mahasiswa_unik, 0)) * 100, 2) AS persentase_izin,
+  ROUND((COALESCE(td.sakit, 0)::numeric / NULLIF(td.total_mahasiswa_unik, 0)) * 100, 2) AS persentase_sakit,
+
+  -- Growth aman
+  CASE
+    WHEN COALESCE(yd.hadir, 0) = 0 AND COALESCE(td.hadir, 0) > 0
+      THEN 100
+    WHEN COALESCE(yd.hadir, 0) = 0 AND COALESCE(td.hadir, 0) = 0
+      THEN 0
+    ELSE ROUND(((td.hadir - yd.hadir)::numeric / yd.hadir) * 100, 2)
+  END AS growth_hadir,
+
+  CASE
+    WHEN COALESCE(yd.izin, 0) = 0 AND COALESCE(td.izin, 0) > 0
+      THEN 100
+    WHEN COALESCE(yd.izin, 0) = 0 AND COALESCE(td.izin, 0) = 0
+      THEN 0
+    ELSE ROUND(((td.izin - yd.izin)::numeric / yd.izin) * 100, 2)
+  END AS growth_izin,
+
+  CASE
+    WHEN COALESCE(yd.sakit, 0) = 0 AND COALESCE(td.sakit, 0) > 0
+      THEN 100
+    WHEN COALESCE(yd.sakit, 0) = 0 AND COALESCE(td.sakit, 0) = 0
+      THEN 0
+    ELSE ROUND(((td.sakit - yd.sakit)::numeric / yd.sakit) * 100, 2)
+  END AS growth_sakit,
+
+  CASE
+    WHEN COALESCE(yd.total_mahasiswa_unik, 0) = 0 AND COALESCE(td.total_mahasiswa_unik, 0) > 0
+      THEN 100
+    WHEN COALESCE(yd.total_mahasiswa_unik, 0) = 0 AND COALESCE(td.total_mahasiswa_unik, 0) = 0
+      THEN 0
+    ELSE ROUND(((td.total_mahasiswa_unik - yd.total_mahasiswa_unik)::numeric / yd.total_mahasiswa_unik) * 100, 2)
+  END AS growth_total_mahasiswa
+
+FROM TotalData td
+LEFT JOIN YesterdayData yd ON TRUE;
+
+
+
+-- name: GetRekapKehadiranPerFasilitasHarian :many
+SELECT
+  f.id AS fasilitas_id,
+  f.nama AS nama_fasilitas,
+  COUNT(DISTINCT k.user_id) AS total_mahasiswa,
+  COUNT(*) FILTER (WHERE k.presensi = 'hadir') AS hadir,
+  COUNT(*) FILTER (WHERE k.presensi = 'izin') AS izin,
+  COUNT(*) FILTER (WHERE k.presensi = 'sakit') AS sakit,
+  -- COUNT(*) FILTER (WHERE k.presensi = 'alpa') AS alpa,
+  ROUND(
+    (COUNT(*) FILTER (WHERE k.presensi = 'hadir')::numeric / NULLIF(COUNT(*), 0)) * 100,
+    2
+  ) AS persentase_hadir
+FROM kehadiran k
+JOIN fasilitas_kesehatan f ON f.id = k.fasilitas_id
+WHERE k.tgl_kehadiran = $1
+  AND k.is_active = TRUE
+GROUP BY f.id, f.nama
+ORDER BY f.nama;
+
+-- name: GetRekapDetailFasilitasHarian :many
+SELECT
+  r.id AS ruangan_id,
+  r.nama_ruangan,
+  COUNT(DISTINCT k.user_id) AS total_mahasiswa,
+  COUNT(*) FILTER (WHERE k.presensi = 'hadir') AS hadir,
+  COUNT(*) FILTER (WHERE k.presensi = 'izin') AS izin,
+  COUNT(*) FILTER (WHERE k.presensi = 'sakit') AS sakit,
+  COUNT(*) FILTER (WHERE k.presensi = 'alpa') AS alpa,
+  ROUND(
+    (COUNT(*) FILTER (WHERE k.presensi = 'hadir')::numeric / NULLIF(COUNT(*), 0)) * 100,
+    2
+  ) AS persentase_hadir
+FROM kehadiran k
+JOIN ruangan r ON r.id = k.ruangan_id
+WHERE k.tgl_kehadiran = $1
+  AND k.fasilitas_id = $2
+  AND k.is_active = TRUE
+GROUP BY r.id, r.nama_ruangan
+ORDER BY r.nama_ruangan;
+
+
+-- name: GetRekapPembimbingFasilitasHarian :many
+SELECT
+  u.id AS pembimbing_id,
+  u.nama AS nama_pembimbing,
+  COUNT(DISTINCT k.user_id) AS total_mahasiswa,
+  COUNT(*) FILTER (WHERE k.presensi = 'hadir') AS hadir,
+  ROUND(
+    (COUNT(*) FILTER (WHERE k.presensi = 'hadir')::numeric / NULLIF(COUNT(*), 0)) * 100,
+    2
+  ) AS persentase_hadir
+FROM kehadiran k
+JOIN users u ON u.id = k.pembimbing_id
+WHERE k.tgl_kehadiran = $1
+  AND k.fasilitas_id = $2
+  AND k.is_active = TRUE
+GROUP BY u.id, u.nama
+ORDER BY u.nama;
+
+-- name: GetMahasiswaTidakHadir :many
+SELECT
+  k.user_id,
+  u.nama AS nama_mahasiswa,
+  r.nama_ruangan,
+  p.nama AS nama_pembimbing,
+  k.presensi,
+  k.status
+FROM kehadiran k
+JOIN users u ON u.id = k.user_id
+JOIN ruangan r ON r.id = k.ruangan_id
+LEFT JOIN users p ON p.id = k.pembimbing_id
+WHERE k.tgl_kehadiran = $1
+  AND k.fasilitas_id = $2
+  AND k.presensi IN ('izin', 'sakit')
+  AND k.is_active = TRUE
+ORDER BY r.nama_ruangan, u.nama;
+
+
+
+
+-- name: GetTrenKehadiran7Hari :many
+SELECT
+  f.id AS fasilitas_id,
+  f.nama AS nama_fasilitas,
+  k.tgl_kehadiran AS tanggal,
+  COUNT(DISTINCT k.user_id) AS total_mahasiswa,
+  COUNT(*) FILTER (WHERE k.presensi = 'hadir') AS hadir,
+  COUNT(*) FILTER (WHERE k.presensi = 'izin') AS izin,
+  COUNT(*) FILTER (WHERE k.presensi = 'sakit') AS sakit,
+  COUNT(*) FILTER (WHERE k.presensi = 'alpa') AS alpa,
+  ROUND(
+    (COUNT(*) FILTER (WHERE k.presensi = 'hadir')::numeric / NULLIF(COUNT(*), 0)) * 100,
+    2
+  ) AS persentase_hadir
+FROM kehadiran k
+JOIN fasilitas_kesehatan f ON f.id = k.fasilitas_id
+WHERE k.tgl_kehadiran BETWEEN (CURRENT_DATE - INTERVAL '6 days') AND CURRENT_DATE
+  AND k.is_active = TRUE
+GROUP BY f.id, f.nama, k.tgl_kehadiran
+ORDER BY f.nama, k.tgl_kehadiran;

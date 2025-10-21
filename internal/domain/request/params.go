@@ -93,7 +93,8 @@ type SearchAktifKontrak struct {
 
 type CreateKontrak struct {
 	FasilitasID    uuid.UUID `json:"fasilitas_id"`
-	Nama           string    `json:"nama"`
+	NoUtama        string    `json:"no_utama"`
+	NoRef          string    `json:"no_ref"`
 	PeriodeMulai   *string   `json:"periode_mulai"`
 	PeriodeSelesai *string   `json:"periode_selesai"`
 	Durasi         *string   `json:"durasi"`
