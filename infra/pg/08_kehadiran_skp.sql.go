@@ -347,6 +347,56 @@ func (q *Queries) GetRekapSKPHarian(ctx context.Context, tgl pgtype.Date) (GetRe
 	return i, err
 }
 
+const getRekapSkpTercapaiByUser = `-- name: GetRekapSkpTercapaiByUser :many
+SELECT
+  si.nama AS nama_skp,
+  COUNT(ks.id) AS jumlah_tercapai,
+  STRING_AGG(DISTINCT to_char(k.tgl_kehadiran, 'DD-MM-YYYY'), ',') AS tanggal_tercapai
+FROM kehadiran_skp ks
+JOIN kehadiran k ON k.id = ks.kehadiran_id
+JOIN skp_intervensi si ON si.id = ks.skp_intervensi_id
+WHERE
+  ks.user_id = $1
+  AND ks.status = 'disetujui'
+  AND ks.is_active = TRUE
+  AND k.is_active = TRUE
+  AND k.tgl_kehadiran BETWEEN $2 AND $3
+GROUP BY si.nama
+ORDER BY si.nama ASC
+`
+
+type GetRekapSkpTercapaiByUserParams struct {
+	UserID   uuid.UUID   `json:"user_id"`
+	TglAwal  pgtype.Date `json:"tgl_awal"`
+	TglAkhir pgtype.Date `json:"tgl_akhir"`
+}
+
+type GetRekapSkpTercapaiByUserRow struct {
+	NamaSkp         string `json:"nama_skp"`
+	JumlahTercapai  int64  `json:"jumlah_tercapai"`
+	TanggalTercapai []byte `json:"tanggal_tercapai"`
+}
+
+func (q *Queries) GetRekapSkpTercapaiByUser(ctx context.Context, arg GetRekapSkpTercapaiByUserParams) ([]GetRekapSkpTercapaiByUserRow, error) {
+	rows, err := q.db.Query(ctx, getRekapSkpTercapaiByUser, arg.UserID, arg.TglAwal, arg.TglAkhir)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetRekapSkpTercapaiByUserRow{}
+	for rows.Next() {
+		var i GetRekapSkpTercapaiByUserRow
+		if err := rows.Scan(&i.NamaSkp, &i.JumlahTercapai, &i.TanggalTercapai); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const intervensiKehadiranID = `-- name: IntervensiKehadiranID :many
 SELECT
 ks.id,

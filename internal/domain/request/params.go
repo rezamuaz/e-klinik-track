@@ -209,3 +209,9 @@ type ApproveKehadiranSkp struct {
 	SkpKehadiranID []uuid.UUID `json:"skp_kehadiran_id"`
 	KehadiranID    uuid.UUID   `json:"kehadiran_id"`
 }
+
+type SearchSkpTercapai struct {
+	UserID   string `json:"user_id"`
+	TglAwal  string `json:"tgl_awal"`
+	TglAkhir string `json:"tgl_akhir"`
+}

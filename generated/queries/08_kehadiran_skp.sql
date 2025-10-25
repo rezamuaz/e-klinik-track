@@ -270,5 +270,23 @@ GROUP BY k.tgl_kehadiran
 ORDER BY k.tgl_kehadiran ASC;
 
 
+-- name: GetRekapSkpTercapaiByUser :many
+SELECT
+  si.nama AS nama_skp,
+  COUNT(ks.id) AS jumlah_tercapai,
+  STRING_AGG(DISTINCT to_char(k.tgl_kehadiran, 'DD-MM-YYYY'), ',') AS tanggal_tercapai
+FROM kehadiran_skp ks
+JOIN kehadiran k ON k.id = ks.kehadiran_id
+JOIN skp_intervensi si ON si.id = ks.skp_intervensi_id
+WHERE
+  ks.user_id = sqlc.arg('user_id')
+  AND ks.status = 'disetujui'
+  AND ks.is_active = TRUE
+  AND k.is_active = TRUE
+  AND k.tgl_kehadiran BETWEEN sqlc.arg('tgl_awal') AND sqlc.arg('tgl_akhir')
+GROUP BY si.nama
+ORDER BY si.nama ASC;
+
+
 
 

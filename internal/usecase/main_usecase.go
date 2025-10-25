@@ -68,6 +68,7 @@ type MainUsecase interface {
 	GetRekapKehadiranPerFasilitasHarian(c context.Context) (any, error)
 	ChartGetHarianSKPPersentase(c context.Context) (any, error)
 	ChartGetHariIniSKPPersentase(c context.Context) (any, error)
+	RekapSkpTercapaiMahasiswaByDate(c context.Context, arg request.SearchSkpTercapai) (any, error)
 }
 
 type MainUsecaseImpl struct {
@@ -979,6 +980,33 @@ func (mu *MainUsecaseImpl) ChartGetHariIniSKPPersentase(c context.Context) (any,
 			_ = mu.cache.SetWithTTL(context.Background(), cacheKey, res, 5*time.Minute)
 
 		}()
+	}
+
+	return resp.WithPaginate(res, nil), nil
+}
+
+func (mu *MainUsecaseImpl) RekapSkpTercapaiMahasiswaByDate(c context.Context, arg request.SearchSkpTercapai) (any, error) {
+
+	var params pg.GetRekapSkpTercapaiByUserParams
+	err := copier.Copy(&params, &arg)
+	if err != nil {
+		return nil, err
+	}
+
+	if arg.UserID != "" {
+		params.UserID = uuid.FromStringOrNil(arg.UserID)
+	}
+
+	var tglAwal pgtype.Date
+	tglAwal.Scan(arg.TglAwal)
+	var tglAkhir pgtype.Date
+	tglAkhir.Scan(arg.TglAkhir)
+	params.TglAwal = tglAwal
+	params.TglAkhir = tglAkhir
+
+	res, err := mu.db.GetRekapSkpTercapaiByUser(c, params)
+	if err != nil {
+		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get kehadiran")
 	}
 
 	return resp.WithPaginate(res, nil), nil
