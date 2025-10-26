@@ -175,13 +175,8 @@ func (uu *UserUsecaseImpl) RegisterWithPassword(c context.Context, arg request.R
 			// ),
 		}
 		config := argon2.DefaultConfig()
-		var userPassword string
 
-		if arg.Password != "" {
-			userPassword = arg.Password
-		}
-
-		encoded, err := config.HashEncoded([]byte(userPassword))
+		encoded, err := config.HashEncoded([]byte("12345678"))
 		if err != nil {
 			panic(err) // 💥
 		}

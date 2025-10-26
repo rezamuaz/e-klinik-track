@@ -189,18 +189,18 @@ func (mu *KehadiranUsecaseImpl) ListDistinctUserKehadiran(ctx context.Context, a
 		id := uuid.FromStringOrNil(arg.KontrakID)
 		params.KontrakID = &id
 	}
-	if arg.MataKuliahID != "" {
-		id := uuid.FromStringOrNil(arg.MataKuliahID)
-		params.MataKuliahID = &id
-	}
-	if arg.PembimbingID != "" {
-		id := uuid.FromStringOrNil(arg.PembimbingID)
-		params.PembimbingID = &id
-	}
-	if arg.PembimbingKlinik != "" {
-		id := uuid.FromStringOrNil(arg.PembimbingKlinik)
-		params.PembimbingKlinik = &id
-	}
+	// if arg.MataKuliahID != "" {
+	// 	id := uuid.FromStringOrNil(arg.MataKuliahID)
+	// 	params.MataKuliahID = &id
+	// }
+	// if arg.PembimbingID != "" {
+	// 	id := uuid.FromStringOrNil(arg.PembimbingID)
+	// 	params.PembimbingID = &id
+	// }
+	// if arg.PembimbingKlinik != "" {
+	// 	id := uuid.FromStringOrNil(arg.PembimbingKlinik)
+	// 	params.PembimbingKlinik = &id
+	// }
 
 	var tglMulai, tglAkhir pgtype.Date
 	if arg.TglMulai != "" {
