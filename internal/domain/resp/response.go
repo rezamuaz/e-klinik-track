@@ -4,18 +4,56 @@ import (
 	"e-klinik/infra/pg"
 	"e-klinik/internal/domain/entity"
 	"e-klinik/pkg"
-	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	validation "github.com/go-ozzo/ozzo-validation/v4"
 )
 
+// Struktur response sukses / error utama
 type BaseHttpResponse struct {
-	Result     any        `json:"result,omitempty"`
-	Success    bool       `json:"success"`
-	ResultCode ResultCode `json:"rc"`
-	Error      any        `json:"error,omitempty"`
+	Success bool               `json:"success"`
+	Message string             `json:"message"`
+	Code    string             `json:"code,omitempty"`
+	Result  any                `json:"result,omitempty"`
+	Error   *pkg.ErrorResponse `json:"error,omitempty"`
+}
+
+// Response sukses
+func RespondSuccess(c *gin.Context, message string, data interface{}) {
+	c.JSON(http.StatusOK, BaseHttpResponse{
+		Success: true,
+		Message: message,
+		Result:  data,
+	})
+}
+
+// HandleErrorResponse kirim respons error standar
+func HandleErrorResponse(c *gin.Context, message string, err error) {
+	appErr, ok := pkg.AsAppError(err)
+	if !ok {
+		appErr = ToAppError(err, pkg.ErrorCodeInternal, message)
+	}
+
+	resp := BaseHttpResponse{
+		Success: false,
+		Message: message,
+		Error: &pkg.ErrorResponse{
+			Message:     appErr.Message,
+			Details:     appErr.Orig,
+			Validations: appErr.Validations,
+		},
+	}
+
+	c.JSON(appErr.HTTPStatus(), resp)
+}
+
+// HandleSuccessResponse kirim respons sukses standar
+func HandleSuccessResponse(c *gin.Context, message string, result any) {
+	c.JSON(http.StatusOK, BaseHttpResponse{
+		Success: true,
+		Message: message,
+		Result:  result,
+	})
 }
 
 type SuccessResponse struct {
@@ -32,72 +70,6 @@ type Pagination struct {
 	PrevPage    bool  `json:"prev"`
 }
 
-func GenerateBaseResponse(result any, success bool, resultCode ResultCode) *BaseHttpResponse {
-	return &BaseHttpResponse{
-		Success:    success,
-		ResultCode: resultCode,
-		Result:     result,
-	}
-}
-
-func GenerateBaseResponseWithError(c *gin.Context, msg string, err error) {
-	resp := pkg.ErrorResponse{Error: pkg.ErrorDetails{
-		Message: msg,
-	}}
-	status := http.StatusInternalServerError
-	var resultCode ResultCode
-	var ierr *pkg.Error
-	if !errors.As(err, &ierr) {
-		resp.Error.Message = "internal error"
-		resp.Error.Details = ierr.Unwrap().Error()
-	} else {
-		switch ierr.Code() {
-		case pkg.ErrorCodeNotFound:
-			status = http.StatusNotFound
-			resultCode = NotFoundError
-			resp.Error.Details = ierr.Error()
-		case pkg.ErrorCodeInvalidArgument:
-			status = http.StatusBadRequest
-			resp.Error.Details = ierr.Error()
-			resultCode = ValidationError
-			var verrors validation.Errors
-			if errors.As(ierr, &verrors) {
-				resp.Validations = verrors
-			}
-		case pkg.ErrorCodeUnknown:
-			fallthrough
-		default:
-			status = http.StatusInternalServerError
-			resultCode = InternalError
-			resp.Error.Details = ierr.Unwrap().Error()
-		}
-	}
-
-	bodyReponse := BaseHttpResponse{
-		Success:    false,
-		ResultCode: resultCode,
-		Result:     nil,
-		Error:      resp}
-	c.JSON(status, bodyReponse)
-}
-
-func GenerateBaseResponseWithAnyError(result any, success bool, resultCode ResultCode, err any) *BaseHttpResponse {
-	return &BaseHttpResponse{
-		Success:    success,
-		ResultCode: resultCode,
-		Result:     result,
-		Error:      err,
-	}
-}
-
-func GenerateBaseResponseWithValidationError(result any, success bool, resultCode ResultCode, err error) *BaseHttpResponse {
-	return &BaseHttpResponse{
-		Success:    success,
-		ResultCode: resultCode,
-		Result:     result,
-		Error:      err.Error(),
-	}
-}
 func WithPaginate(data any, pagination any) *SuccessResponse {
 	return &SuccessResponse{
 		Data:       data,
@@ -123,6 +95,25 @@ func CalculatePagination(page int32, limit int32, totalRows int64) *Pagination {
 		CurrentPage: page,
 		NextPage:    page < int32(totalPages),
 		PrevPage:    page > 1,
+	}
+}
+
+// ToAppError memastikan error biasa dikonversi jadi *AppError
+func ToAppError(err error, code pkg.ErrorCode, msg string) *pkg.AppError {
+	if ae, ok := pkg.AsAppError(err); ok {
+		return ae
+	}
+
+	wrapped := pkg.WrapError(err, code, msg)
+	if ae, ok := wrapped.(*pkg.AppError); ok {
+		return ae
+	}
+
+	return &pkg.AppError{
+		Code:    code,
+		Message: msg,
+		Orig:    err,
+		Expose:  false,
 	}
 }
 
@@ -161,17 +152,3 @@ func BuildMenuTree(items []pg.GetR1ViewRecursiveRow, parentID *int32) []*entity.
 
 	return nodes
 }
-
-type ResultCode int
-
-const (
-	Success         ResultCode = 0
-	ValidationError ResultCode = 4000
-	AuthError       ResultCode = 4001
-	ForbiddenError  ResultCode = 4003
-	NotFoundError   ResultCode = 4004
-	LimiterError    ResultCode = 4291
-	OtpLimiterError ResultCode = 4292
-	CustomRecovery  ResultCode = 5001
-	InternalError   ResultCode = 5002
-)

@@ -12,6 +12,14 @@ INSERT INTO kontrak (
   $1, $2, $3, $4, $5, $6, $7, $8
 ) RETURNING *;
 
+-- name: CheckKontrakOverlap :one
+SELECT EXISTS (
+  SELECT 1
+  FROM kontrak
+  WHERE fasilitas_id = $1
+    AND (sqlc.arg('periode_mulai')::timestamptz, sqlc.arg('periode_selesai')::timestamptz) OVERLAPS (periode_mulai, periode_selesai)
+) AS is_overlap;
+
 -- name: GetKontrakByID :one
 SELECT 
    k.id,

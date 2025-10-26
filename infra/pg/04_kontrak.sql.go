@@ -12,6 +12,28 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const checkKontrakOverlap = `-- name: CheckKontrakOverlap :one
+SELECT EXISTS (
+  SELECT 1
+  FROM kontrak
+  WHERE fasilitas_id = $1
+    AND ($2::timestamptz, $3::timestamptz) OVERLAPS (periode_mulai, periode_selesai)
+) AS is_overlap
+`
+
+type CheckKontrakOverlapParams struct {
+	FasilitasID    uuid.UUID          `json:"fasilitas_id"`
+	PeriodeMulai   pgtype.Timestamptz `json:"periode_mulai"`
+	PeriodeSelesai pgtype.Timestamptz `json:"periode_selesai"`
+}
+
+func (q *Queries) CheckKontrakOverlap(ctx context.Context, arg CheckKontrakOverlapParams) (bool, error) {
+	row := q.db.QueryRow(ctx, checkKontrakOverlap, arg.FasilitasID, arg.PeriodeMulai, arg.PeriodeSelesai)
+	var is_overlap bool
+	err := row.Scan(&is_overlap)
+	return is_overlap, err
+}
+
 const countKontrak = `-- name: CountKontrak :one
 SELECT COUNT(*)::bigint
 FROM kontrak k

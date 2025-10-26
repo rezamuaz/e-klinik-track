@@ -27,7 +27,7 @@ type IndexRepositoryImpl struct {
 	cfg   *config.Config
 }
 
-// NewTask instantiates the Task repository.
+// NewIndexRepository instantiates the index repository
 func NewIndexRepository(ts *pkg.TypeSense) *IndexRepositoryImpl {
 	return &IndexRepositoryImpl{
 		ts:    ts,
@@ -35,70 +35,75 @@ func NewIndexRepository(ts *pkg.TypeSense) *IndexRepositoryImpl {
 	}
 }
 
-// Index creates or updates a task in an index.
-func (t *IndexRepositoryImpl) CreateIndex(c context.Context, col string, document any) error {
-	_, err := t.ts.Client.Collection(col).Documents().Create(c, document, &api.DocumentIndexParameters{})
+// CreateIndex inserts a new document into a Typesense collection
+func (t *IndexRepositoryImpl) CreateIndex(ctx context.Context, col string, document any) error {
+	_, err := t.ts.Client.Collection(col).Documents().Create(ctx, document, &api.DocumentIndexParameters{})
 	if err != nil {
-		return pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "IndexRequest.Do")
+		return pkg.WrapError(err, pkg.ErrorCodeInternal, "failed to create document index")
 	}
-
 	return nil
 }
 
-// Index creates or updates a task in an index.
-func (t *IndexRepositoryImpl) Upsert(c context.Context, col string, document any) error {
-
-	_, err := t.ts.Client.Collection(col).Documents().Upsert(c, document, &api.DocumentIndexParameters{})
+// Upsert inserts or updates a document in a Typesense collection
+func (t *IndexRepositoryImpl) Upsert(ctx context.Context, col string, document any) error {
+	_, err := t.ts.Client.Collection(col).Documents().Upsert(ctx, document, &api.DocumentIndexParameters{})
 	if err != nil {
-		return pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "UpsertDocument.Do")
+		return pkg.WrapError(err, pkg.ErrorCodeInternal, "failed to upsert document index")
 	}
-
 	return nil
 }
 
-// Delete removes a task from the index.
-func (t *IndexRepositoryImpl) DeleteIndex(c context.Context, col string, id string) error {
-	_, err := t.ts.Client.Collection(col).Document(id).Delete(c)
+// DeleteIndex removes a document from the Typesense collection
+func (t *IndexRepositoryImpl) DeleteIndex(ctx context.Context, col string, id string) error {
+	_, err := t.ts.Client.Collection(col).Document(id).Delete(ctx)
 	if err != nil {
-		return pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "DeleteRequest.Do")
+		return pkg.WrapError(err, pkg.ErrorCodeInternal, "failed to delete document index")
 	}
-
 	return nil
 }
 
-// Search returns tasks matching a query.
-func (t *IndexRepositoryImpl) SearchIndex(c context.Context, args request.SearchParams) (any, any, error) {
-	// ctx, span := trace.SpanFromContext(ctx).Tracer().Start(ctx, "Task.Search")
-	// defer span.End()
-
-	// if args.IsZero() {
-	// 	return internal.SearchResults{}, nil
-	// }
+// SearchIndex performs a search query on the Typesense collection
+func (t *IndexRepositoryImpl) SearchIndex(ctx context.Context, args request.SearchParams) (any, any, error) {
 	var should bytes.Buffer
-	var stringsList []string
+	var filters []string
 
-	if len(args.Genre) != 0 {
-		stringsList = append(stringsList, "genres.name IN"+"["+strings.Join(args.Genre, ",")+"]")
+	// Build filter conditions dynamically
+	if len(args.Genre) > 0 {
+		filters = append(filters, "genres.name:=["+strings.Join(args.Genre, ",")+"]")
+	}
+	if len(args.Status) > 0 {
+		filters = append(filters, "status:=["+strings.Join(args.Status, ",")+"]")
+	}
+	if len(args.Type) > 0 {
+		filters = append(filters, "type:=["+strings.Join(args.Type, ",")+"]")
 	}
 
-	if len(args.Status) != 0 {
-		stringsList = append(stringsList, "status IN"+"["+strings.Join(args.Status, ",")+"]")
+	if len(filters) > 0 {
+		should.WriteString(strings.Join(filters, " && "))
 	}
 
-	if len(args.Type) != 0 {
-		stringsList = append(stringsList, "type IN"+"["+strings.Join(args.Status, ",")+"]")
-	}
-
-	should.WriteString(strings.Join(stringsList, " AND "))
-
+	// Search parameters
 	arg := &api.SearchCollectionParams{
 		Q:       &args.Query,
 		QueryBy: utils.StringPtr("title"),
-	}
-	resp, err := t.ts.Client.Collection("pvsave").Documents().Search(c, arg)
-	if err != nil {
-		return nil, nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "SearchRequest.Do")
+		FilterBy: func() *string {
+			if should.Len() > 0 {
+				s := should.String()
+				return &s
+			}
+			return nil
+		}(),
 	}
 
-	return resp, dto.Pagination{CurrentPage: int64(*resp.Page), TotalPage: int64(resp.RequestParams.PerPage)}, nil
+	resp, err := t.ts.Client.Collection(t.index).Documents().Search(ctx, arg)
+	if err != nil {
+		return nil, nil, pkg.WrapError(err, pkg.ErrorCodeInternal, "failed to execute search query")
+	}
+
+	pagination := dto.Pagination{
+		CurrentPage: int64(*resp.Page),
+		TotalPage:   int64(resp.RequestParams.PerPage),
+	}
+
+	return resp, pagination, nil
 }

@@ -1,10 +1,9 @@
 module e-klinik
 
-go 1.24.0
-
-toolchain go1.24.3
+go 1.24.8
 
 require (
+	github.com/casbin/casbin/v2 v2.126.0
 	github.com/coreos/go-oidc/v3 v3.10.0
 	github.com/go-logr/stdr v1.2.2
 	github.com/go-playground/validator/v10 v10.26.0
@@ -31,18 +30,15 @@ require (
 	github.com/bmatcuk/doublestar/v4 v4.9.1 // indirect
 	github.com/bytedance/sonic v1.13.2 // indirect
 	github.com/bytedance/sonic/loader v0.2.4 // indirect
-	github.com/casbin/casbin/v2 v2.126.0 // indirect
 	github.com/casbin/govaluate v1.10.0 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cloudwego/base64x v0.1.5 // indirect
-	github.com/cloudwego/iasm v0.2.0 // indirect
 	github.com/creasty/defaults v1.6.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.9 // indirect
-	github.com/gin-contrib/authz v1.0.5 // indirect
 	github.com/gin-contrib/sse v1.1.0 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
 	github.com/go-jose/go-jose/v4 v4.0.1 // indirect
@@ -52,6 +48,7 @@ require (
 	github.com/go-zoox/core-utils v1.2.11 // indirect
 	github.com/go-zoox/headers v1.0.6 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
+	github.com/golang/mock v1.6.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.22.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
@@ -70,7 +67,6 @@ require (
 	github.com/rs/xid v1.5.0 // indirect
 	github.com/samber/lo v1.51.0 // indirect
 	github.com/sony/gobreaker v1.0.0 // indirect
-	github.com/stretchr/testify v1.10.0 // indirect
 	github.com/tidwall/gjson v1.14.4 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
@@ -99,14 +95,13 @@ require (
 	github.com/google/wire v0.6.0
 	github.com/gtoxlili/pgx-adapter v0.0.0-20250918022703-6c96ee94ac58
 	github.com/ilyakaznacheev/cleanenv v1.5.0
-	github.com/jackc/pgx v3.6.2+incompatible
+	github.com/jackc/pgerrcode v0.0.0-20250907135507-afb5586c32a6
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/kkrypt0nn/spaceflake v1.5.1
 	github.com/klauspost/compress v1.17.9 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/rs/zerolog v1.33.0
 	github.com/streadway/amqp v1.1.0
-	github.com/supertokens/supertokens-golang v0.21.0
 	github.com/vgarvardt/pgx-google-uuid/v5 v5.6.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.30.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.30.0

@@ -40,7 +40,7 @@ WHERE uur.user_id = $1
   AND uur.deleted_at IS NULL
   AND ur.deleted_at IS NULL;
 
--- name: GetUserMenuViews :many
+-- name: UserViewPermission :many
 SELECT DISTINCT
     r1.id AS view_id,
     r1.label AS view_label,
