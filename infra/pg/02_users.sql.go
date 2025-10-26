@@ -12,6 +12,42 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countDistinctUserKehadiran = `-- name: CountDistinctUserKehadiran :one
+SELECT COUNT(DISTINCT k.user_id) AS total
+FROM kehadiran k
+JOIN users u ON u.id = k.user_id
+WHERE
+  k.deleted_at IS NULL
+  AND ($1::uuid IS NULL OR k.kontrak_id = $1::uuid)
+  AND ($2::uuid IS NULL OR k.mata_kuliah_id = $2::uuid)
+  AND ($3::uuid IS NULL OR k.pembimbing_id = $3::uuid)
+  AND ($4::uuid IS NULL OR k.pembimbing_klinik = $4::uuid)
+  AND k.tgl_kehadiran BETWEEN $5::date AND $6::date
+`
+
+type CountDistinctUserKehadiranParams struct {
+	KontrakID        *uuid.UUID  `json:"kontrak_id"`
+	MataKuliahID     *uuid.UUID  `json:"mata_kuliah_id"`
+	PembimbingID     *uuid.UUID  `json:"pembimbing_id"`
+	PembimbingKlinik *uuid.UUID  `json:"pembimbing_klinik"`
+	TglMulai         pgtype.Date `json:"tgl_mulai"`
+	TglAkhir         pgtype.Date `json:"tgl_akhir"`
+}
+
+func (q *Queries) CountDistinctUserKehadiran(ctx context.Context, arg CountDistinctUserKehadiranParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countDistinctUserKehadiran,
+		arg.KontrakID,
+		arg.MataKuliahID,
+		arg.PembimbingID,
+		arg.PembimbingKlinik,
+		arg.TglMulai,
+		arg.TglAkhir,
+	)
+	var total int64
+	err := row.Scan(&total)
+	return total, err
+}
+
 const countUsers = `-- name: CountUsers :one
 SELECT COUNT(DISTINCT u.id)::bigint
 FROM public.users u
@@ -265,6 +301,65 @@ func (q *Queries) GetUsersByRoles(ctx context.Context, roleIds []int32) ([]GetUs
 	for rows.Next() {
 		var i GetUsersByRolesRow
 		if err := rows.Scan(&i.UserID, &i.NamaUser, &i.RoleID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDistinctUserKehadiran = `-- name: ListDistinctUserKehadiran :many
+SELECT DISTINCT
+  u.id AS user_id,
+  u.nama AS nama
+FROM kehadiran k
+JOIN users u ON u.id = k.user_id
+WHERE
+  k.deleted_at IS NULL
+  AND ($1::uuid IS NULL OR k.kontrak_id = $1::uuid)
+  AND ($2::uuid IS NULL OR k.mata_kuliah_id = $2::uuid)
+  AND ($3::uuid IS NULL OR k.pembimbing_id = $3::uuid)
+  AND ($4::uuid IS NULL OR k.pembimbing_klinik = $4::uuid)
+  AND k.tgl_kehadiran BETWEEN '2025-10-10'::date AND '2025-10-26'::date
+ORDER BY u.nama ASC
+LIMIT $6
+OFFSET $5
+`
+
+type ListDistinctUserKehadiranParams struct {
+	KontrakID        *uuid.UUID `json:"kontrak_id"`
+	MataKuliahID     *uuid.UUID `json:"mata_kuliah_id"`
+	PembimbingID     *uuid.UUID `json:"pembimbing_id"`
+	PembimbingKlinik *uuid.UUID `json:"pembimbing_klinik"`
+	Offset           int32      `json:"offset"`
+	Limit            int32      `json:"limit"`
+}
+
+type ListDistinctUserKehadiranRow struct {
+	UserID uuid.UUID `json:"user_id"`
+	Nama   string    `json:"nama"`
+}
+
+func (q *Queries) ListDistinctUserKehadiran(ctx context.Context, arg ListDistinctUserKehadiranParams) ([]ListDistinctUserKehadiranRow, error) {
+	rows, err := q.db.Query(ctx, listDistinctUserKehadiran,
+		arg.KontrakID,
+		arg.MataKuliahID,
+		arg.PembimbingID,
+		arg.PembimbingKlinik,
+		arg.Offset,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListDistinctUserKehadiranRow{}
+	for rows.Next() {
+		var i ListDistinctUserKehadiranRow
+		if err := rows.Scan(&i.UserID, &i.Nama); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

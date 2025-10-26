@@ -23,6 +23,7 @@ func User(group *gin.RouterGroup, h *handler.UserHandlerImpl) {
 	group.PUT("/group/:id", h.UpdateGroup)
 	group.DELETE("/group/:id", h.DelGroup)
 	group.GET("", h.ListUsers)
+	group.DELETE("/:id", h.DelUser)
 	group.GET("/:id", h.UserById)
 	group.PUT("/:id", h.UpdateUser)
 	group.POST("", h.CreateNewUser)

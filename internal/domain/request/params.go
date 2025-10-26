@@ -173,6 +173,18 @@ type SearchUser struct {
 	Offset   int32   `form:"offset" json:"offset"`
 	Limit    int32   `form:"limit" json:"limit"`
 }
+
+type SearchUserKehadiran struct {
+	Page             int32  `form:"page" json:"page"`
+	KontrakID        string `form:"kontrak_id" json:"kontrak_id"`
+	MataKuliahID     string `form:"mata_kuliah_id" json:"mata_kuliah_id"`
+	PembimbingID     string `form:"pembimbing_id" json:"pembimbing_id"`
+	PembimbingKlinik string `form:"pembimbing_klinik" json:"pembimbing_klinik"`
+	TglMulai         string `form:"tgl_mulai" json:"tgl_mulai"`
+	TglAkhir         string `form:"tgl_akhir" json:"tgl_akhir"`
+	Offset           int32  `form:"offset" json:"offset"`
+	Limit            int32  `form:"limit" json:"limit"`
+}
 type UpdateUser struct {
 	Nama        *string   `json:"nama"`
 	IsActive    *bool     `json:"is_active"`
@@ -211,7 +223,7 @@ type ApproveKehadiranSkp struct {
 }
 
 type SearchSkpTercapai struct {
-	UserID   string `json:"user_id"`
-	TglAwal  string `json:"tgl_awal"`
-	TglAkhir string `json:"tgl_akhir"`
+	UserID   string `form:"user_id" json:"user_id"`
+	TglAwal  string `form:"tgl_awal" json:"tgl_awal"`
+	TglAkhir string `form:"tgl_akhir" json:"tgl_akhir"`
 }

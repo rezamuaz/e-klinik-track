@@ -31,6 +31,7 @@ type UserUsecase interface {
 	AddRoleForUser(c context.Context, u pg.CreateUserRoleParams) (any, error)
 	AddMenu(c context.Context, arg pg.CreateR1ViewParams) (any, error)
 	ListMenu(c context.Context, arg request.SearchMenu) (any, error)
+	DeleteUser(c context.Context, arg uuid.UUID) error
 	EditMenu(c context.Context, arg pg.UpdateR1ViewParams) (any, error)
 	DeleteMenu(c context.Context, arg pg.DeleteR1ViewParams) error
 	MenuById(c context.Context, arg int32) (any, error)
@@ -622,6 +623,17 @@ func (uu *UserUsecaseImpl) UpdateUserPartial(c context.Context, arg request.Upda
 
 		return nil, nil
 	})
+}
+
+func (uu *UserUsecaseImpl) DeleteUser(c context.Context, arg uuid.UUID) error {
+	// var err error
+	err := uu.db.DelUser(c, arg)
+	if err != nil {
+		return pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed delete data")
+	}
+
+	return nil
+
 }
 
 func (uu *UserUsecaseImpl) GetUserId(c context.Context, arg uuid.UUID) (any, error) {

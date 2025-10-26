@@ -24,6 +24,7 @@ type KehadiranHandler interface {
 	CheckKehadiran(c *gin.Context)
 	GetKehadiranByPembimbingStatus(c *gin.Context)
 	GetKehadiranByMahasiswaStatus(c *gin.Context)
+	ListDistinctUserKehadiran(c *gin.Context)
 }
 
 type KehadiranHandlerImpl struct {
@@ -198,4 +199,23 @@ func (h *KehadiranHandlerImpl) GetKehadiranByMahasiswaStatus(c *gin.Context) {
 	}
 
 	resp.HandleSuccessResponse(c, "success get kehadiran by pembimbing", result)
+}
+
+func (h *KehadiranHandlerImpl) ListDistinctUserKehadiran(c *gin.Context) {
+	ctx, cancel := utils.ContextWithTimeout(c, 5*time.Second)
+	defer cancel()
+
+	var req request.SearchUserKehadiran
+	if err := c.ShouldBindQuery(&req); err != nil {
+		resp.HandleErrorResponse(c, "invalid query parameters", pkg.ExposeError(pkg.ErrorCodeInvalidArgument, "invalid query parameters"))
+		return
+	}
+
+	res, err := h.ku.ListDistinctUserKehadiran(ctx, req)
+	if err != nil {
+		resp.HandleErrorResponse(c, "failed get user kehadiran", err)
+		return
+	}
+
+	resp.HandleSuccessResponse(c, "success get user kehadiran", res)
 }

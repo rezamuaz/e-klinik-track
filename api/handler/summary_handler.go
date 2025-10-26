@@ -2,7 +2,11 @@ package handler
 
 import (
 	"e-klinik/config"
+	"e-klinik/pkg"
+	"e-klinik/utils"
+	"time"
 
+	"e-klinik/internal/domain/request"
 	"e-klinik/internal/domain/resp"
 	"e-klinik/internal/usecase"
 
@@ -89,19 +93,21 @@ func (h *SummaryHandlerImpl) ChartGetHariIniSKPPersentase(c *gin.Context) {
 	resp.HandleSuccessResponse(c, "success get chart hari ini SKP persentase", res)
 }
 
-// func (h *SummaryHandlerImpl) GetKehadiranByMahasiswaStatus(c *gin.Context) {
-// 	ctx := c.Request.Context()
+func (h *SummaryHandlerImpl) RekapSkpTercapaiMahasiswaByDate(c *gin.Context) {
+	ctx, cancel := utils.ContextWithTimeout(c, 5*time.Second)
+	defer cancel()
 
-// 	var arg pg.GetKehadiranByPembimbingUserIdParams
-// 	value, _ := c.Get("Id")
-// 	id := uuid.Must(uuid.FromString(value.(string)))
-// 	arg.UserID = &id
+	var req request.SearchSkpTercapai
+	if err := c.ShouldBindQuery(&req); err != nil {
+		resp.HandleErrorResponse(c, "invalid query parameters", pkg.ExposeError(pkg.ErrorCodeInvalidArgument, "invalid query parameters"))
+		return
+	}
 
-// 	result, err := h.su.GetKehadiranByPembimbingStatus(ctx, arg)
-// 	if err != nil {
-// 		resp.HandleErrorResponse(c, "failed get kehadiran by mahasiswa", err)
-// 		return
-// 	}
+	res, err := h.su.RekapSkpTercapaiMahasiswaByDate(ctx, req)
+	if err != nil {
+		resp.HandleErrorResponse(c, "failed get chart hari ini SKP persentase", err)
+		return
+	}
 
-// 	resp.HandleSuccessResponse(c, "success get kehadiran by mahasiswa", result)
-// }
+	resp.HandleSuccessResponse(c, "success get chart hari ini SKP persentase", res)
+}
