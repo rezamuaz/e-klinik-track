@@ -288,5 +288,47 @@ GROUP BY si.nama
 ORDER BY si.nama ASC;
 
 
+-- name: GetGlobalSKPPersentaseTahunanOtomatis :many
+WITH KategoriSemua AS (
+    SELECT UNNEST(ARRAY['Tercapai', 'Belum Tercapai', 'Belum Diverifikasi']) AS kategori_nama
+),
+Total AS (
+    SELECT COUNT(*) AS total
+    FROM kehadiran_skp ks
+    JOIN kehadiran k ON k.id = ks.kehadiran_id
+    WHERE ks.is_active = TRUE
+      AND k.is_active = TRUE
+      AND k.tgl_kehadiran BETWEEN date_trunc('year', CURRENT_DATE)::date AND CURRENT_DATE
+),
+DataRekap AS (
+    SELECT
+        CASE
+            WHEN (ks.status = 'disetujui' OR ks.locked = TRUE) THEN 'Tercapai'
+            WHEN ks.status = 'ditolak' THEN 'Belum Tercapai'
+            ELSE 'Belum Diverifikasi'
+        END AS kategori_status,
+        COUNT(*) AS jumlah
+    FROM kehadiran_skp ks
+    JOIN kehadiran k ON k.id = ks.kehadiran_id
+    WHERE ks.is_active = TRUE
+      AND k.is_active = TRUE
+      AND k.tgl_kehadiran BETWEEN date_trunc('year', CURRENT_DATE)::date AND CURRENT_DATE
+    GROUP BY kategori_status
+)
+SELECT
+    ks.kategori_nama AS kategori,
+    COALESCE(dr.jumlah, 0) AS jumlah,
+    t.total AS total_skp,
+    ROUND(
+        (COALESCE(dr.jumlah, 0)::numeric / NULLIF(t.total, 0)) * 100,
+        2
+    ) AS persentase
+FROM KategoriSemua ks
+LEFT JOIN DataRekap dr ON dr.kategori_status = ks.kategori_nama
+CROSS JOIN Total t
+ORDER BY persentase DESC;
+
+
+
 
 

@@ -29,6 +29,7 @@ type SummaryUsecase interface {
 	ChartGetHarianSKPPersentase(c context.Context) (any, error)
 	ChartGetHariIniSKPPersentase(c context.Context) (any, error)
 	RekapSkpTercapaiMahasiswaByDate(c context.Context, arg request.SearchSkpTercapai) (any, error)
+	GetGlobalSKPPersentaseTahunanOtomatis(c context.Context) (any, error)
 }
 
 type SummaryUsecaseImpl struct {
@@ -339,5 +340,47 @@ func (mu *SummaryUsecaseImpl) RekapSkpTercapaiMahasiswaByDate(
 		return nil, pkg.WrapError(err, pkg.ErrorCodeInternal, "failed get rekap skp mahasiswa")
 	}
 
+	return resp.WithPaginate(res, nil), nil
+}
+
+func (mu *SummaryUsecaseImpl) GetGlobalSKPPersentaseTahunanOtomatis(c context.Context) (any, error) {
+	// 1. Ambil tanggal dan tahun saat ini
+	tgl, err := utils.GetJakartaDateObject()
+	if err != nil {
+		return nil, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed get jakarta time")
+	}
+
+	cacheKey := fmt.Sprintf("rekap:kehadiran:skp:tahunan:%d", tgl.Year())
+
+	// 2. Coba ambil dari Redis
+	if mu.cache != nil {
+		if cached, err := mu.cache.GetRaw(c, cacheKey); err == nil && cached != "" {
+			var data []pg.GetGlobalSKPPersentaseTahunanOtomatisRow // ⚠️ PERBAIKAN: Gunakan tipe data hasil yang benar
+			if err := json.Unmarshal([]byte(cached), &data); err == nil {
+				// Return dengan tipe yang sesuai
+				return resp.WithPaginate(data, nil), nil
+			}
+			// Log error Unmarshal jika terjadi, lalu lanjutkan ke DB
+		}
+	}
+	// 3. Eksekusi query utama ke Database
+	res, err := mu.db.GetGlobalSKPPersentaseTahunanOtomatis(c)
+	if err != nil {
+		return nil, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed get kehadiran")
+	}
+	// 4. Simpan ke Redis selama 5 menit
+	if mu.cache != nil {
+		go func() {
+			// ⚠️ PERBAIKAN: Marshal data ke JSON sebelum disimpan.
+			// Menggunakan tipe yang benar (res) lebih aman daripada 'any'.
+			jsonBytes, err := json.Marshal(res)
+			if err == nil {
+				// Simpan sebagai string JSON. TTL 5 menit cocok untuk data yang sering berubah.
+				_ = mu.cache.SetWithTTL(context.Background(), cacheKey, string(jsonBytes), 5*time.Minute)
+			}
+		}()
+	}
+
+	// 5. Kembalikan hasil dari Database
 	return resp.WithPaginate(res, nil), nil
 }

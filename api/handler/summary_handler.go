@@ -19,6 +19,7 @@ type SummaryHandler interface {
 	GetRekapKehadiranPerFasilitasHarian(c *gin.Context)
 	ChartGetHarianSKPPersentase(c *gin.Context)
 	ChartGetHariIniSKPPersentase(c *gin.Context)
+	GetGlobalSKPPersentaseTahunanOtomatis(c *gin.Context)
 }
 
 type SummaryHandlerImpl struct {
@@ -104,6 +105,19 @@ func (h *SummaryHandlerImpl) RekapSkpTercapaiMahasiswaByDate(c *gin.Context) {
 	}
 
 	res, err := h.su.RekapSkpTercapaiMahasiswaByDate(ctx, req)
+	if err != nil {
+		resp.HandleErrorResponse(c, "failed get chart hari ini SKP persentase", err)
+		return
+	}
+
+	resp.HandleSuccessResponse(c, "success get chart hari ini SKP persentase", res)
+}
+
+func (h *SummaryHandlerImpl) GetGlobalSKPPersentaseTahunanOtomatis(c *gin.Context) {
+	ctx, cancel := utils.ContextWithTimeout(c, 5*time.Second)
+	defer cancel()
+
+	res, err := h.su.GetGlobalSKPPersentaseTahunanOtomatis(ctx)
 	if err != nil {
 		resp.HandleErrorResponse(c, "failed get chart hari ini SKP persentase", err)
 		return

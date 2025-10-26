@@ -184,13 +184,17 @@ ORDER BY
 -- name: ListDistinctUserKehadiran :many
 SELECT DISTINCT
   u.id AS user_id,
-  u.nama AS nama
+  u.nama AS nama,
+  u.username AS username
 FROM kehadiran k
-JOIN users u ON u.id = k.user_id
+LEFT JOIN  users u ON u.id = k.user_id
 WHERE
   k.deleted_at IS NULL
-  AND (sqlc.narg('kontrak_id') IS NULL OR k.kontrak_id = sqlc.narg('kontrak_id')::uuid)
-  AND k.tgl_kehadiran BETWEEN sqlc.arg('tgl_mulai')::date AND sqlc.arg('tgl_akhir')::date
+  AND k.kontrak_id = COALESCE(sqlc.narg('kontrak_id')::uuid, k.kontrak_id)
+  AND k.mata_kuliah_id = COALESCE(sqlc.narg('mata_kuliah_id')::uuid, k.mata_kuliah_id)
+  AND k.pembimbing_id = COALESCE(sqlc.narg('pembimbing_id')::uuid, k.pembimbing_id)
+  AND k.pembimbing_klinik = COALESCE(sqlc.narg('pembimbing_klinik')::uuid, k.pembimbing_klinik)
+  AND k.tgl_kehadiran BETWEEN sqlc.arg('tgl_awal')::date AND sqlc.arg('tgl_akhir')::date
 ORDER BY u.nama ASC
 LIMIT sqlc.arg('limit')
 OFFSET sqlc.arg('offset');
@@ -198,10 +202,13 @@ OFFSET sqlc.arg('offset');
 -- name: CountDistinctUserKehadiran :one
 SELECT COUNT(DISTINCT k.user_id) AS total
 FROM kehadiran k
-JOIN users u ON u.id = k.user_id
+LEFT JOIN users u ON u.id = k.user_id
 WHERE
   k.deleted_at IS NULL
-  AND (sqlc.narg('kontrak_id') IS NULL OR k.kontrak_id = sqlc.narg('kontrak_id')::uuid)
-  AND k.tgl_kehadiran BETWEEN sqlc.arg('tgl_mulai')::date AND sqlc.arg('tgl_akhir')::date;
+  AND k.kontrak_id = COALESCE(sqlc.narg('kontrak_id')::uuid, k.kontrak_id)
+  AND k.mata_kuliah_id = COALESCE(sqlc.narg('mata_kuliah_id')::uuid, k.mata_kuliah_id)
+  AND k.pembimbing_id = COALESCE(sqlc.narg('pembimbing_id')::uuid, k.pembimbing_id)
+  AND k.pembimbing_klinik = COALESCE(sqlc.narg('pembimbing_klinik')::uuid, k.pembimbing_klinik)
+  AND k.tgl_kehadiran BETWEEN sqlc.arg('tgl_awal')::date AND sqlc.arg('tgl_akhir')::date;
 
 
