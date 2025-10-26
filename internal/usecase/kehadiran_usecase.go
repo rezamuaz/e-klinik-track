@@ -184,34 +184,49 @@ func (mu *KehadiranUsecaseImpl) ListDistinctUserKehadiran(ctx context.Context, a
 		return nil, pkg.WrapError(err, pkg.ErrorCodeInternal, "failed to copy parameters")
 	}
 
-	// 🧠 Parse UUID (gunakan pointer)
 	if arg.KontrakID != "" {
 		id := uuid.FromStringOrNil(arg.KontrakID)
-		params.KontrakID = &id
+		params.KontrakID = &id // Set pointer ke UUID valid
+	} else {
+		params.KontrakID = nil // Set pointer ke nil (ini adalah NULL SQL)
 	}
-	// if arg.MataKuliahID != "" {
-	// 	id := uuid.FromStringOrNil(arg.MataKuliahID)
-	// 	params.MataKuliahID = &id
-	// }
-	// if arg.PembimbingID != "" {
-	// 	id := uuid.FromStringOrNil(arg.PembimbingID)
-	// 	params.PembimbingID = &id
-	// }
-	// if arg.PembimbingKlinik != "" {
-	// 	id := uuid.FromStringOrNil(arg.PembimbingKlinik)
-	// 	params.PembimbingKlinik = &id
-	// }
 
-	var tglMulai, tglAkhir pgtype.Date
-	if arg.TglMulai != "" {
-		tglMulai.Scan(arg.TglMulai)
+	// Ulangi pola di atas untuk MataKuliahID, PembimbingID, dan PembimbingKlinik
+	if arg.MataKuliahID != "" {
+		id := uuid.FromStringOrNil(arg.MataKuliahID)
+		params.MataKuliahID = &id
+	} else {
+		params.MataKuliahID = nil
 	}
+
+	if arg.PembimbingID != "" {
+		id := uuid.FromStringOrNil(arg.PembimbingID)
+		params.PembimbingID = &id
+	} else {
+		params.PembimbingID = nil
+	}
+
+	if arg.PembimbingKlinik != "" {
+		id := uuid.FromStringOrNil(arg.PembimbingKlinik)
+		params.PembimbingKlinik = &id
+	} else {
+		params.PembimbingKlinik = nil
+	}
+
+	// Penanganan Tanggal (Sudah Cukup Baik menggunakan pgtype.Date)
+	var TglAwal, tglAkhir pgtype.Date
+	if arg.TglAwal != "" {
+		// Asumsi Scan(string) akan mengatur tglMulai.Valid = true
+		TglAwal.Scan(arg.TglAwal)
+	}
+	// Jika arg.TglMulai == "", maka tglMulai.Valid akan false (NULL yang benar)
+
 	if arg.TglAkhir != "" {
 		tglAkhir.Scan(arg.TglAkhir)
 	}
-	// params.TglMulai = tglMulai
-	// params.TglAkhir = tglAkhir
 
+	params.TglAwal = TglAwal
+	params.TglAkhir = tglAkhir
 	params.Limit = arg.Limit
 	params.Offset = arg.Offset
 
@@ -221,9 +236,9 @@ func (mu *KehadiranUsecaseImpl) ListDistinctUserKehadiran(ctx context.Context, a
 		return nil, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed to list user kehadiran")
 	}
 
-	// if len(res) == 0 {
-	// 	return resp.WithPaginate([]string{}, nil), nil
-	// }
+	if len(res) == 0 {
+		return resp.WithPaginate([]string{}, nil), nil
+	}
 
 	// 📊 Query count untuk pagination
 	var countParams pg.CountDistinctUserKehadiranParams

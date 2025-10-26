@@ -180,7 +180,7 @@ type SearchUserKehadiran struct {
 	MataKuliahID     string `form:"mata_kuliah_id" json:"mata_kuliah_id"`
 	PembimbingID     string `form:"pembimbing_id" json:"pembimbing_id"`
 	PembimbingKlinik string `form:"pembimbing_klinik" json:"pembimbing_klinik"`
-	TglMulai         string `form:"tgl_mulai" json:"tgl_mulai"`
+	TglAwal          string `form:"tgl_awal" json:"tgl_awal"`
 	TglAkhir         string `form:"tgl_akhir" json:"tgl_akhir"`
 	Offset           int32  `form:"offset" json:"offset"`
 	Limit            int32  `form:"limit" json:"limit"`

@@ -282,6 +282,79 @@ func (q *Queries) GetGlobalSKPPersentase(ctx context.Context, tgl pgtype.Date) (
 	return items, nil
 }
 
+const getGlobalSKPPersentaseTahunanOtomatis = `-- name: GetGlobalSKPPersentaseTahunanOtomatis :many
+WITH KategoriSemua AS (
+    SELECT UNNEST(ARRAY['Tercapai', 'Belum Tercapai', 'Belum Diverifikasi']) AS kategori_nama
+),
+Total AS (
+    SELECT COUNT(*) AS total
+    FROM kehadiran_skp ks
+    JOIN kehadiran k ON k.id = ks.kehadiran_id
+    WHERE ks.is_active = TRUE
+      AND k.is_active = TRUE
+      AND k.tgl_kehadiran BETWEEN date_trunc('year', CURRENT_DATE)::date AND CURRENT_DATE
+),
+DataRekap AS (
+    SELECT
+        CASE
+            WHEN (ks.status = 'disetujui' OR ks.locked = TRUE) THEN 'Tercapai'
+            WHEN ks.status = 'ditolak' THEN 'Belum Tercapai'
+            ELSE 'Belum Diverifikasi'
+        END AS kategori_status,
+        COUNT(*) AS jumlah
+    FROM kehadiran_skp ks
+    JOIN kehadiran k ON k.id = ks.kehadiran_id
+    WHERE ks.is_active = TRUE
+      AND k.is_active = TRUE
+      AND k.tgl_kehadiran BETWEEN date_trunc('year', CURRENT_DATE)::date AND CURRENT_DATE
+    GROUP BY kategori_status
+)
+SELECT
+    ks.kategori_nama AS kategori,
+    COALESCE(dr.jumlah, 0) AS jumlah,
+    t.total AS total_skp,
+    ROUND(
+        (COALESCE(dr.jumlah, 0)::numeric / NULLIF(t.total, 0)) * 100,
+        2
+    ) AS persentase
+FROM KategoriSemua ks
+LEFT JOIN DataRekap dr ON dr.kategori_status = ks.kategori_nama
+CROSS JOIN Total t
+ORDER BY persentase DESC
+`
+
+type GetGlobalSKPPersentaseTahunanOtomatisRow struct {
+	Kategori   interface{}    `json:"kategori"`
+	Jumlah     int64          `json:"jumlah"`
+	TotalSkp   int64          `json:"total_skp"`
+	Persentase pgtype.Numeric `json:"persentase"`
+}
+
+func (q *Queries) GetGlobalSKPPersentaseTahunanOtomatis(ctx context.Context) ([]GetGlobalSKPPersentaseTahunanOtomatisRow, error) {
+	rows, err := q.db.Query(ctx, getGlobalSKPPersentaseTahunanOtomatis)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetGlobalSKPPersentaseTahunanOtomatisRow{}
+	for rows.Next() {
+		var i GetGlobalSKPPersentaseTahunanOtomatisRow
+		if err := rows.Scan(
+			&i.Kategori,
+			&i.Jumlah,
+			&i.TotalSkp,
+			&i.Persentase,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getKehadiranSkp = `-- name: GetKehadiranSkp :one
 SELECT id, kehadiran_id, skp_intervensi_id, user_id, status, is_active, locked, deleted_by, deleted_at, updated_note, updated_by, updated_at, created_by, created_at
 FROM kehadiran_skp
