@@ -37,7 +37,7 @@ type UserHandler interface {
 	UpdateUser(c *gin.Context)
 	UserById(c *gin.Context)
 	UserRoleByUserId(c *gin.Context)
-
+	DelUser(c *gin.Context)
 	UpdateRolePolicyByRoleId(c *gin.Context)
 	CreateNewUser(c *gin.Context)
 	UserViewPermission(c *gin.Context)
@@ -739,4 +739,26 @@ func (lc *UserHandlerImpl) CreateNewUser(c *gin.Context) {
 		return
 	}
 	resp.HandleSuccessResponse(c, "success create new user", res)
+}
+func (lc *UserHandlerImpl) DelUser(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+
+	idStr := c.Param("id")
+	if idStr == "" {
+		resp.HandleErrorResponse(c, "invalid request", pkg.ExposeError(pkg.ErrorCodeInvalidArgument, "missing id parameter"))
+		return
+	}
+	var p uuid.UUID
+
+	p = uuid.Must(uuid.FromString(idStr))
+
+	err := lc.Uu.DeleteUser(ctx, p)
+
+	if err != nil {
+		resp.HandleErrorResponse(c, "failed to delete fasilitas kesehatan", err)
+		return
+	}
+
+	resp.HandleSuccessResponse(c, "success delete fasilitas kesehatan", gin.H{"id": idStr})
 }

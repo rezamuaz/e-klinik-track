@@ -14,5 +14,6 @@ func Summary(group *gin.RouterGroup, h *handler.SummaryHandlerImpl) {
 	group.GET("/chart/skp/sekarang/global", h.GetRekapSKPGlobalHarian)
 	group.GET("/chart/skp/seminggu", h.ChartGetHarianSKPPersentase)
 	group.GET("/chart/skp/hariini", h.ChartGetHariIniSKPPersentase)
+	group.GET("/block/skp/date", h.RekapSkpTercapaiMahasiswaByDate)
 
 }

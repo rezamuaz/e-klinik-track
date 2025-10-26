@@ -351,7 +351,7 @@ const getRekapSkpTercapaiByUser = `-- name: GetRekapSkpTercapaiByUser :many
 SELECT
   si.nama AS nama_skp,
   COUNT(ks.id) AS jumlah_tercapai,
-  STRING_AGG(DISTINCT to_char(k.tgl_kehadiran, 'DD-MM-YYYY'), ',') AS tanggal_tercapai
+  COALESCE(string_agg(DISTINCT to_char(k.tgl_kehadiran, 'DD-MM-YYYY'), ', '), '')::text AS tanggal_tercapai
 FROM kehadiran_skp ks
 JOIN kehadiran k ON k.id = ks.kehadiran_id
 JOIN skp_intervensi si ON si.id = ks.skp_intervensi_id
@@ -374,7 +374,7 @@ type GetRekapSkpTercapaiByUserParams struct {
 type GetRekapSkpTercapaiByUserRow struct {
 	NamaSkp         string `json:"nama_skp"`
 	JumlahTercapai  int64  `json:"jumlah_tercapai"`
-	TanggalTercapai []byte `json:"tanggal_tercapai"`
+	TanggalTercapai string `json:"tanggal_tercapai"`
 }
 
 func (q *Queries) GetRekapSkpTercapaiByUser(ctx context.Context, arg GetRekapSkpTercapaiByUserParams) ([]GetRekapSkpTercapaiByUserRow, error) {

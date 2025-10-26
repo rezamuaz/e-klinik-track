@@ -16,4 +16,5 @@ func Kehadiran(group *gin.RouterGroup, h *handler.KehadiranHandlerImpl) {
 	group.GET("/user/status", h.CheckKehadiran)
 	group.GET("pembimbing-klinik", h.GetKehadiranByPembimbingStatus)
 	group.GET("/mahasiswa", h.GetKehadiranByMahasiswaStatus)
+	group.GET("/users", h.ListDistinctUserKehadiran)
 }

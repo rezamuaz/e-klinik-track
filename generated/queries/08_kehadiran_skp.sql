@@ -274,7 +274,7 @@ ORDER BY k.tgl_kehadiran ASC;
 SELECT
   si.nama AS nama_skp,
   COUNT(ks.id) AS jumlah_tercapai,
-  STRING_AGG(DISTINCT to_char(k.tgl_kehadiran, 'DD-MM-YYYY'), ',') AS tanggal_tercapai
+  COALESCE(string_agg(DISTINCT to_char(k.tgl_kehadiran, 'DD-MM-YYYY'), ', '), '')::text AS tanggal_tercapai
 FROM kehadiran_skp ks
 JOIN kehadiran k ON k.id = ks.kehadiran_id
 JOIN skp_intervensi si ON si.id = ks.skp_intervensi_id

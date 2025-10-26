@@ -286,28 +286,57 @@ func (mu *SummaryUsecaseImpl) ChartGetHariIniSKPPersentase(c context.Context) (a
 	return resp.WithPaginate(res, nil), nil
 }
 
-func (mu *SummaryUsecaseImpl) RekapSkpTercapaiMahasiswaByDate(c context.Context, arg request.SearchSkpTercapai) (any, error) {
+func (mu *SummaryUsecaseImpl) RekapSkpTercapaiMahasiswaByDate(
+	c context.Context,
+	arg request.SearchSkpTercapai,
+) (any, error) {
 
 	var params pg.GetRekapSkpTercapaiByUserParams
-	err := copier.Copy(&params, &arg)
-	if err != nil {
-		return nil, err
+	if err := copier.Copy(&params, &arg); err != nil {
+		return nil, pkg.WrapError(err, pkg.ErrorCodeInternal, "failed to copy params")
 	}
 
+	// 🔹 Validasi & parsing UserID (hindari panic)
 	if arg.UserID != "" {
-		params.UserID = uuid.FromStringOrNil(arg.UserID)
+		uid, err := uuid.FromString(arg.UserID)
+		if err != nil {
+			return nil, pkg.ExposeError(pkg.ErrorCodeInvalidArgument, "user_id invalid")
+		}
+		params.UserID = uid
 	}
 
-	var tglAwal pgtype.Date
-	tglAwal.Scan(arg.TglAwal)
-	var tglAkhir pgtype.Date
-	tglAkhir.Scan(arg.TglAkhir)
-	params.TglAwal = tglAwal
-	params.TglAkhir = tglAkhir
+	// 🔹 Parsing tanggal aman (pastikan nil check)
+	if arg.TglAwal == "" {
+		return nil, pkg.ExposeError(pkg.ErrorCodeInvalidArgument, "tanggal awal tidak boleh kosong")
+	}
+	if arg.TglAkhir == "" {
+		return nil, pkg.ExposeError(pkg.ErrorCodeInvalidArgument, "tanggal akhir tidak boleh kosong")
+	}
 
+	var tglAwal, tglAkhir time.Time
+	var err error
+
+	tglAwal, err = time.Parse("2006-01-02", arg.TglAwal)
+	if err != nil {
+		return nil, pkg.ExposeError(pkg.ErrorCodeInvalidArgument, "format tanggal awal tidak valid (gunakan YYYY-MM-DD)")
+	}
+
+	tglAkhir, err = time.Parse("2006-01-02", arg.TglAkhir)
+	if err != nil {
+		return nil, pkg.ExposeError(pkg.ErrorCodeInvalidArgument, "format tanggal akhir tidak valid (gunakan YYYY-MM-DD)")
+	}
+
+	params.TglAwal = pgtype.Date{Time: tglAwal, Valid: true}
+	params.TglAkhir = pgtype.Date{Time: tglAkhir, Valid: true}
+
+	// 🔹 Eksekusi query sqlc
 	res, err := mu.db.GetRekapSkpTercapaiByUser(c, params)
 	if err != nil {
-		return nil, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed get kehadiran")
+		// misalnya kalau tidak ada data, kembalikan slice kosong bukan error
+		if errors.Is(err, pgx.ErrNoRows) {
+			return resp.WithPaginate([]any{}, nil), nil
+		}
+		return nil, pkg.WrapError(err, pkg.ErrorCodeInternal, "failed get rekap skp mahasiswa")
 	}
 
 	return resp.WithPaginate(res, nil), nil
