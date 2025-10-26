@@ -189,11 +189,8 @@ FROM kehadiran k
 JOIN users u ON u.id = k.user_id
 WHERE
   k.deleted_at IS NULL
-  AND (sqlc.narg('kontrak_id')::uuid IS NULL OR k.kontrak_id = sqlc.narg('kontrak_id')::uuid)
-  AND (sqlc.narg('mata_kuliah_id')::uuid IS NULL OR k.mata_kuliah_id = sqlc.narg('mata_kuliah_id')::uuid)
-  AND (sqlc.narg('pembimbing_id')::uuid IS NULL OR k.pembimbing_id = sqlc.narg('pembimbing_id')::uuid)
-  AND (sqlc.narg('pembimbing_klinik')::uuid IS NULL OR k.pembimbing_klinik = sqlc.narg('pembimbing_klinik')::uuid)
-  AND k.tgl_kehadiran BETWEEN '2025-10-10'::date AND '2025-10-26'::date
+  AND (sqlc.narg('kontrak_id') IS NULL OR k.kontrak_id = sqlc.narg('kontrak_id')::uuid)
+  AND k.tgl_kehadiran BETWEEN sqlc.arg('tgl_mulai')::date AND sqlc.arg('tgl_akhir')::date
 ORDER BY u.nama ASC
 LIMIT sqlc.arg('limit')
 OFFSET sqlc.arg('offset');
@@ -204,10 +201,7 @@ FROM kehadiran k
 JOIN users u ON u.id = k.user_id
 WHERE
   k.deleted_at IS NULL
-  AND (sqlc.narg('kontrak_id')::uuid IS NULL OR k.kontrak_id = sqlc.narg('kontrak_id')::uuid)
-  AND (sqlc.narg('mata_kuliah_id')::uuid IS NULL OR k.mata_kuliah_id = sqlc.narg('mata_kuliah_id')::uuid)
-  AND (sqlc.narg('pembimbing_id')::uuid IS NULL OR k.pembimbing_id = sqlc.narg('pembimbing_id')::uuid)
-  AND (sqlc.narg('pembimbing_klinik')::uuid IS NULL OR k.pembimbing_klinik = sqlc.narg('pembimbing_klinik')::uuid)
+  AND (sqlc.narg('kontrak_id') IS NULL OR k.kontrak_id = sqlc.narg('kontrak_id')::uuid)
   AND k.tgl_kehadiran BETWEEN sqlc.arg('tgl_mulai')::date AND sqlc.arg('tgl_akhir')::date;
 
 

@@ -18,31 +18,18 @@ FROM kehadiran k
 JOIN users u ON u.id = k.user_id
 WHERE
   k.deleted_at IS NULL
-  AND ($1::uuid IS NULL OR k.kontrak_id = $1::uuid)
-  AND ($2::uuid IS NULL OR k.mata_kuliah_id = $2::uuid)
-  AND ($3::uuid IS NULL OR k.pembimbing_id = $3::uuid)
-  AND ($4::uuid IS NULL OR k.pembimbing_klinik = $4::uuid)
-  AND k.tgl_kehadiran BETWEEN $5::date AND $6::date
+  AND ($1 IS NULL OR k.kontrak_id = $1::uuid)
+  AND k.tgl_kehadiran BETWEEN $2::date AND $3::date
 `
 
 type CountDistinctUserKehadiranParams struct {
-	KontrakID        *uuid.UUID  `json:"kontrak_id"`
-	MataKuliahID     *uuid.UUID  `json:"mata_kuliah_id"`
-	PembimbingID     *uuid.UUID  `json:"pembimbing_id"`
-	PembimbingKlinik *uuid.UUID  `json:"pembimbing_klinik"`
-	TglMulai         pgtype.Date `json:"tgl_mulai"`
-	TglAkhir         pgtype.Date `json:"tgl_akhir"`
+	KontrakID interface{} `json:"kontrak_id"`
+	TglMulai  pgtype.Date `json:"tgl_mulai"`
+	TglAkhir  pgtype.Date `json:"tgl_akhir"`
 }
 
 func (q *Queries) CountDistinctUserKehadiran(ctx context.Context, arg CountDistinctUserKehadiranParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countDistinctUserKehadiran,
-		arg.KontrakID,
-		arg.MataKuliahID,
-		arg.PembimbingID,
-		arg.PembimbingKlinik,
-		arg.TglMulai,
-		arg.TglAkhir,
-	)
+	row := q.db.QueryRow(ctx, countDistinctUserKehadiran, arg.KontrakID, arg.TglMulai, arg.TglAkhir)
 	var total int64
 	err := row.Scan(&total)
 	return total, err
@@ -319,23 +306,19 @@ FROM kehadiran k
 JOIN users u ON u.id = k.user_id
 WHERE
   k.deleted_at IS NULL
-  AND ($1::uuid IS NULL OR k.kontrak_id = $1::uuid)
-  AND ($2::uuid IS NULL OR k.mata_kuliah_id = $2::uuid)
-  AND ($3::uuid IS NULL OR k.pembimbing_id = $3::uuid)
-  AND ($4::uuid IS NULL OR k.pembimbing_klinik = $4::uuid)
-  AND k.tgl_kehadiran BETWEEN '2025-10-10'::date AND '2025-10-26'::date
+  AND ($1 IS NULL OR k.kontrak_id = $1::uuid)
+  AND k.tgl_kehadiran BETWEEN $2::date AND $3::date
 ORDER BY u.nama ASC
-LIMIT $6
-OFFSET $5
+LIMIT $5
+OFFSET $4
 `
 
 type ListDistinctUserKehadiranParams struct {
-	KontrakID        *uuid.UUID `json:"kontrak_id"`
-	MataKuliahID     *uuid.UUID `json:"mata_kuliah_id"`
-	PembimbingID     *uuid.UUID `json:"pembimbing_id"`
-	PembimbingKlinik *uuid.UUID `json:"pembimbing_klinik"`
-	Offset           int32      `json:"offset"`
-	Limit            int32      `json:"limit"`
+	KontrakID interface{} `json:"kontrak_id"`
+	TglMulai  pgtype.Date `json:"tgl_mulai"`
+	TglAkhir  pgtype.Date `json:"tgl_akhir"`
+	Offset    int32       `json:"offset"`
+	Limit     int32       `json:"limit"`
 }
 
 type ListDistinctUserKehadiranRow struct {
@@ -346,9 +329,8 @@ type ListDistinctUserKehadiranRow struct {
 func (q *Queries) ListDistinctUserKehadiran(ctx context.Context, arg ListDistinctUserKehadiranParams) ([]ListDistinctUserKehadiranRow, error) {
 	rows, err := q.db.Query(ctx, listDistinctUserKehadiran,
 		arg.KontrakID,
-		arg.MataKuliahID,
-		arg.PembimbingID,
-		arg.PembimbingKlinik,
+		arg.TglMulai,
+		arg.TglAkhir,
 		arg.Offset,
 		arg.Limit,
 	)

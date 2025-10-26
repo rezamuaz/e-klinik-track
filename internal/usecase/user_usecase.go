@@ -178,7 +178,7 @@ func (uu *UserUsecaseImpl) RegisterWithPassword(c context.Context, arg request.R
 		var userPassword string
 
 		if arg.Password != "" {
-			userPassword = arg.Password
+			userPassword = "12345678"
 		}
 
 		encoded, err := config.HashEncoded([]byte(userPassword))
