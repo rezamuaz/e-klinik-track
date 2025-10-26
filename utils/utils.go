@@ -328,3 +328,7 @@ func StrToListInt32(csv string) ([]int32, error) {
 
 	return result, nil
 }
+
+func ContextWithTimeout(c *gin.Context, d time.Duration) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(c.Request.Context(), d)
+}

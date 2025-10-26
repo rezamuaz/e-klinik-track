@@ -22,14 +22,42 @@ import (
 
 // InitServer is the injector entry po int.
 func Injector(cfg *config.Config, ch *amqp.Channel, pg *pkg.Postgres, cache *pkg.RedisCache, casbin2 *casbin.Enforcer) *pkg.Server {
+	producerService := worker.NewQueueService(ch)
+	actorUsecaseImpl := usecase.NewActorUsecase(pg, producerService, cache)
+	actorHandlerImpl := handler.NewActorHandler(actorUsecaseImpl, cfg)
 	userUsecaseImpl := usecase.NewUserUsecase(pg, cfg, cache, casbin2)
 	authHandlerImpl := handler.NewAuthHandler(userUsecaseImpl, cfg)
-	producerService := worker.NewQueueService(ch)
-	mainUsecaseImpl := usecase.NewMainUsecase(pg, producerService, cache)
-	mainHandlerImpl := handler.NewMainHandler(mainUsecaseImpl, cfg)
+	fasilitasUsecaseImpl := usecase.NewFasilitasUseCase(pg, producerService, cache)
+	fasilitasHandlerImpl := handler.NewFasilitasHandler(fasilitasUsecaseImpl, cfg)
+	kehadiranUsecaseImpl := usecase.NewKehadiranUsecase(pg, producerService, cache)
+	kehadiranHandlerImpl := handler.NewKehadiranHandler(kehadiranUsecaseImpl, cfg)
+	kontrakUsecaseImpl := usecase.NewKontrakUsecase(pg, producerService, cache)
+	kontrakHandlerImpl := handler.NewKontrakHandler(kontrakUsecaseImpl, cfg)
+	mataKuliahUsecaseImpl := usecase.NewMataKuliahUsecase(pg, producerService, cache)
+	mataKuliahHandlerImpl := handler.NewMataKuliahHandler(mataKuliahUsecaseImpl, cfg)
+	ruanganUsecaseImpl := usecase.NewRuanganUsecase(pg, producerService, cache)
+	ruanganHandlerImpl := handler.NewRuanganHandler(ruanganUsecaseImpl, cfg)
+	skpUsecaseImpl := usecase.NewSkpUsecase(pg, producerService, cache)
+	skpHandlerImpl := handler.NewSkpHandler(skpUsecaseImpl, cfg)
+	skpKehadiranUsecaseImpl := usecase.NewSkpKehadiranUsecase(pg, producerService, cache)
+	skpKehadiranHandlerImpl := handler.NewSkpKehadiranHandler(skpKehadiranUsecaseImpl, cfg)
+	summaryUsecaseImpl := usecase.NewSummaryUsecase(pg, producerService, cache)
+	summaryHandlerImpl := handler.NewSummaryHandler(summaryUsecaseImpl, cfg)
+	userHandlerImpl := handler.NewUserHandler(userUsecaseImpl, cfg)
+	permissionHandlerImpl := handler.NewPermissionHandler(userUsecaseImpl, cfg)
 	initialized := &api.Initialized{
-		AuthHandler: authHandlerImpl,
-		MainHandler: mainHandlerImpl,
+		ActorHandler:        actorHandlerImpl,
+		AuthHandler:         authHandlerImpl,
+		FasilitasHandler:    fasilitasHandlerImpl,
+		KehadiranHandler:    kehadiranHandlerImpl,
+		KontrakHandler:      kontrakHandlerImpl,
+		MataKuliahHandler:   mataKuliahHandlerImpl,
+		RuanganHandler:      ruanganHandlerImpl,
+		SkpHandler:          skpHandlerImpl,
+		SkpKehadiranHandler: skpKehadiranHandlerImpl,
+		SummaryHandler:      summaryHandlerImpl,
+		UserHandler:         userHandlerImpl,
+		PermissionHandler:   permissionHandlerImpl,
 	}
 	server := api.NewApiRouter(cfg, initialized, casbin2, cache)
 	return server
@@ -37,6 +65,6 @@ func Injector(cfg *config.Config, ch *amqp.Channel, pg *pkg.Postgres, cache *pkg
 
 // wire.go:
 
-var usecaseSet = wire.NewSet(usecase.NewUserUsecase, wire.Bind(new(usecase.UserUsecase), new(*usecase.UserUsecaseImpl)), usecase.NewMainUsecase, wire.Bind(new(usecase.MainUsecase), new(*usecase.MainUsecaseImpl)))
+var usecaseSet = wire.NewSet(usecase.NewUserUsecase, wire.Bind(new(usecase.UserUsecase), new(*usecase.UserUsecaseImpl)), usecase.NewFasilitasUseCase, wire.Bind(new(usecase.FasilitasUsecase), new(*usecase.FasilitasUsecaseImpl)), usecase.NewKontrakUsecase, wire.Bind(new(usecase.KontrakUsecase), new(*usecase.KontrakUsecaseImpl)), usecase.NewRuanganUsecase, wire.Bind(new(usecase.RuanganUsecase), new(*usecase.RuanganUsecaseImpl)), usecase.NewMataKuliahUsecase, wire.Bind(new(usecase.MataKuliahUsecase), new(*usecase.MataKuliahUsecaseImpl)), usecase.NewKehadiranUsecase, wire.Bind(new(usecase.KehadiranUsecase), new(*usecase.KehadiranUsecaseImpl)), usecase.NewSkpKehadiranUsecase, wire.Bind(new(usecase.SkpKehadiranUsecase), new(*usecase.SkpKehadiranUsecaseImpl)), usecase.NewSkpUsecase, wire.Bind(new(usecase.SkpUsecase), new(*usecase.SkpUsecaseImpl)), usecase.NewActorUsecase, wire.Bind(new(usecase.ActorUsecase), new(*usecase.ActorUsecaseImpl)), usecase.NewSummaryUsecase, wire.Bind(new(usecase.SummaryUsecase), new(*usecase.SummaryUsecaseImpl)))
 
-var handlerSet = wire.NewSet(handler.NewAuthHandler, wire.Bind(new(handler.AuthHandler), new(*handler.AuthHandlerImpl)), handler.NewMainHandler, wire.Bind(new(handler.MainHandler), new(*handler.MainHandlerImpl)))
+var handlerSet = wire.NewSet(handler.NewAuthHandler, wire.Bind(new(handler.AuthHandler), new(*handler.AuthHandlerImpl)), handler.NewUserHandler, wire.Bind(new(handler.UserHandler), new(*handler.UserHandlerImpl)), handler.NewFasilitasHandler, wire.Bind(new(handler.FasilitasHandler), new(*handler.FasilitasHandlerImpl)), handler.NewKontrakHandler, wire.Bind(new(handler.KontrakHandler), new(*handler.KontrakHandlerImpl)), handler.NewRuanganHandler, wire.Bind(new(handler.RuanganHandler), new(*handler.RuanganHandlerImpl)), handler.NewMataKuliahHandler, wire.Bind(new(handler.MataKuliahHandler), new(*handler.MataKuliahHandlerImpl)), handler.NewKehadiranHandler, wire.Bind(new(handler.KehadiranHandler), new(*handler.KehadiranHandlerImpl)), handler.NewSkpKehadiranHandler, wire.Bind(new(handler.SkpKehadiranHandler), new(*handler.SkpKehadiranHandlerImpl)), handler.NewSkpHandler, wire.Bind(new(handler.SkpHandler), new(*handler.SkpHandlerImpl)), handler.NewActorHandler, wire.Bind(new(handler.ActorHandler), new(*handler.ActorHandlerImpl)), handler.NewSummaryHandler, wire.Bind(new(handler.SummaryHandler), new(*handler.SummaryHandlerImpl)), handler.NewPermissionHandler, wire.Bind(new(handler.PermissionHandler), new(*handler.PermissionHandlerImpl)))

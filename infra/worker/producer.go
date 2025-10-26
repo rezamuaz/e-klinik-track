@@ -18,9 +18,9 @@ type ProducerService struct {
 }
 
 // NewTask instantiates the Task repository.
-func NewQueueService(Ch *amqp.Channel) (*ProducerService) {
+func NewQueueService(Ch *amqp.Channel) *ProducerService {
 	return &ProducerService{
-		Ch:Ch,
+		Ch: Ch,
 	}
 }
 
@@ -36,29 +36,29 @@ func (t *ProducerService) Deleted(ctx context.Context, id string) error {
 }
 
 func (t *ProducerService) publish(spanName string, routingKey string, event any) error {
-	
-
 	var b bytes.Buffer
 
+	// Encode event ke dalam format gob
 	if err := gob.NewEncoder(&b).Encode(event); err != nil {
-		return pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "gob.Encode")
+		return pkg.WrapError(err, pkg.ErrorCodeInternal, "failed to encode event with gob")
 	}
 
-
+	// Publish ke RabbitMQ
 	err := t.Ch.Publish(
-		constant.ExchangeName,    // exchange
-		routingKey, // routing key
-		true,      // mandatory
-		false,      // immediate
+		constant.ExchangeName, // exchange
+		routingKey,            // routing key
+		true,                  // mandatory
+		false,                 // immediate
 		amqp.Publishing{
 			DeliveryMode: amqp.Persistent,
-			AppId:       "tasks-rest-server",
-			ContentType: "application/x-encoding-gob", // XXX: We will revisit this in future episodes
-			Body:        b.Bytes(),
-			Timestamp:   time.Now(),
-		})
+			AppId:        "tasks-rest-server",
+			ContentType:  "application/x-encoding-gob",
+			Body:         b.Bytes(),
+			Timestamp:    time.Now(),
+		},
+	)
 	if err != nil {
-		return pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "ch.Publish")
+		return pkg.WrapError(err, pkg.ErrorCodeInternal, "failed to publish message to broker")
 	}
 
 	return nil

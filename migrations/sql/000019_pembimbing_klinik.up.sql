@@ -12,3 +12,6 @@ CREATE TABLE IF NOT EXISTS pembimbing_klinik (
     created_by VARCHAR,
     created_at TIMESTAMPTZ DEFAULT now()
 );
+
+ALTER TABLE pembimbing_klinik ADD CONSTRAINT pembimbing_klinik_kontrak_user_ukey
+UNIQUE ("kontrak_id", "user_id");

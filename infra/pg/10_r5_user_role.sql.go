@@ -106,68 +106,6 @@ func (q *Queries) DeleteUnRegisterRole(ctx context.Context, arg DeleteUnRegister
 	return err
 }
 
-const getUserMenuViews = `-- name: GetUserMenuViews :many
-SELECT DISTINCT
-    r1.id AS view_id,
-    r1.label AS view_label,
-    r1.view,
-    r1.resource_key,
-    r1.action
-FROM
-    r5_user_roles ur 
-JOIN
-    r4_roles r4 ON ur.role_id = r4.id
-JOIN
-    r3_view_roles r3 ON ur.role_id = r3.role_id
-JOIN
-    r1_views r1 ON r3.view_id = r1.id
-WHERE
-    ur.user_id = $1
-    
-    -- Filter View Murni
-    AND r1.view = 'view'
-    
-    -- Filter Status Aktif
-    AND ur.deleted_at IS NULL
-    AND r3.deleted_at IS NULL
-    AND r1.is_active = TRUE
-    AND r4.is_active = TRUE
-`
-
-type GetUserMenuViewsRow struct {
-	ViewID      int32   `json:"view_id"`
-	ViewLabel   string  `json:"view_label"`
-	View        *string `json:"view"`
-	ResourceKey string  `json:"resource_key"`
-	Action      string  `json:"action"`
-}
-
-func (q *Queries) GetUserMenuViews(ctx context.Context, userID uuid.UUID) ([]GetUserMenuViewsRow, error) {
-	rows, err := q.db.Query(ctx, getUserMenuViews, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []GetUserMenuViewsRow{}
-	for rows.Next() {
-		var i GetUserMenuViewsRow
-		if err := rows.Scan(
-			&i.ViewID,
-			&i.ViewLabel,
-			&i.View,
-			&i.ResourceKey,
-			&i.Action,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const getUserRolesByUserID = `-- name: GetUserRolesByUserID :many
 SELECT
     ur.id,
@@ -195,6 +133,68 @@ func (q *Queries) GetUserRolesByUserID(ctx context.Context, userID uuid.UUID) ([
 	for rows.Next() {
 		var i GetUserRolesByUserIDRow
 		if err := rows.Scan(&i.ID, &i.Nama); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const userViewPermission = `-- name: UserViewPermission :many
+SELECT DISTINCT
+    r1.id AS view_id,
+    r1.label AS view_label,
+    r1.view,
+    r1.resource_key,
+    r1.action
+FROM
+    r5_user_roles ur 
+JOIN
+    r4_roles r4 ON ur.role_id = r4.id
+JOIN
+    r3_view_roles r3 ON ur.role_id = r3.role_id
+JOIN
+    r1_views r1 ON r3.view_id = r1.id
+WHERE
+    ur.user_id = $1
+    
+    -- Filter View Murni
+    AND r1.view = 'view'
+    
+    -- Filter Status Aktif
+    AND ur.deleted_at IS NULL
+    AND r3.deleted_at IS NULL
+    AND r1.is_active = TRUE
+    AND r4.is_active = TRUE
+`
+
+type UserViewPermissionRow struct {
+	ViewID      int32   `json:"view_id"`
+	ViewLabel   string  `json:"view_label"`
+	View        *string `json:"view"`
+	ResourceKey string  `json:"resource_key"`
+	Action      string  `json:"action"`
+}
+
+func (q *Queries) UserViewPermission(ctx context.Context, userID uuid.UUID) ([]UserViewPermissionRow, error) {
+	rows, err := q.db.Query(ctx, userViewPermission, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []UserViewPermissionRow{}
+	for rows.Next() {
+		var i UserViewPermissionRow
+		if err := rows.Scan(
+			&i.ViewID,
+			&i.ViewLabel,
+			&i.View,
+			&i.ResourceKey,
+			&i.Action,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

@@ -34,7 +34,7 @@ type UserUsecase interface {
 	EditMenu(c context.Context, arg pg.UpdateR1ViewParams) (any, error)
 	DeleteMenu(c context.Context, arg pg.DeleteR1ViewParams) error
 	MenuById(c context.Context, arg int32) (any, error)
-	AccessList(c context.Context, arg request.SearchMenu) (any, error)
+	ListPermission(c context.Context, arg request.SearchMenu) (any, error)
 	AddRole(c context.Context, arg pg.CreateR4RoleParams) (any, error)
 	ListRole(c context.Context) (any, error)
 	UpdateRole(c context.Context, arg pg.UpdateR4RoleParams) (any, error)
@@ -50,8 +50,8 @@ type UserUsecase interface {
 	GetUserId(c context.Context, arg uuid.UUID) (any, error)
 	GetUserRoleByUserId(c context.Context, arg uuid.UUID) (any, error)
 	GetViewByRoleId(c context.Context, arg int32) (any, error)
-	AddRolePolicy(c context.Context, arg request.UpdateRolePolicy) (any, error)
-	GetViewUser(c context.Context, arg uuid.UUID) (any, error)
+	UpdateRolePolicy(c context.Context, arg request.UpdateRolePolicy) (any, error)
+	UserViewPermission(c context.Context, arg uuid.UUID) (any, error)
 }
 
 type UserUsecaseImpl struct {
@@ -81,22 +81,22 @@ func (uu *UserUsecaseImpl) LoginWithPassword(c context.Context, username string,
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			// Tidak ada user → return empty response, error nil
-			return resp.User{}, pkg.WrapErrorf(err, pkg.ErrorCodeNotFound, "user not found")
+			return resp.User{}, pkg.WrapError(err, pkg.ErrorCodeNotFound, "user not found")
 		}
-		return resp.User{}, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed login")
+		return resp.User{}, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed login")
 	}
 
 	if res.Password == "" {
-		return resp.User{}, pkg.WrapErrorf(err, pkg.ErrorCodeNotFound, "password empty")
+		return resp.User{}, pkg.WrapError(err, pkg.ErrorCodeNotFound, "password empty")
 	}
 	storeHash := []byte(res.Password)
 	bytePassword := []byte(password)
 	ok, err := argon2.VerifyEncoded(bytePassword, storeHash)
 	if err != nil {
-		return resp.User{}, pkg.WrapErrorf(err, pkg.ErrorCodeNotFound, "verify password error")
+		return resp.User{}, pkg.WrapError(err, pkg.ErrorCodeNotFound, "verify password error")
 	}
 	if !ok {
-		return resp.User{}, pkg.WrapErrorf(err, pkg.ErrorCodeNotFound, "password invalid")
+		return resp.User{}, pkg.WrapError(err, pkg.ErrorCodeNotFound, "password invalid")
 	}
 
 	sessionId := pkg.NewUlid()
@@ -129,9 +129,9 @@ func (uu *UserUsecaseImpl) LoginWithPassword(c context.Context, username string,
 		return resp.User{}, err
 	}
 
-	view, err := uu.db.GetUserMenuViews(c, res.ID)
+	view, err := uu.db.UserViewPermission(c, res.ID)
 	if err != nil {
-		return resp.User{}, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get menu")
+		return resp.User{}, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed get menu")
 	}
 
 	expire := time.Duration(uu.cfg.JWT.AccessTokenExpireHour)*time.Minute - 1*time.Minute
@@ -174,14 +174,20 @@ func (uu *UserUsecaseImpl) RegisterWithPassword(c context.Context, arg request.R
 			// ),
 		}
 		config := argon2.DefaultConfig()
-		encoded, err := config.HashEncoded([]byte("123456678"))
+		var userPassword string
+
+		if arg.Password != "" {
+			userPassword = arg.Password
+		}
+
+		encoded, err := config.HashEncoded([]byte(userPassword))
 		if err != nil {
 			panic(err) // 💥
 		}
 		user.Password = string(encoded)
 		res, err := qtx.CreateOrUpdateUser(c, user)
 		if err != nil {
-			return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed register")
+			return nil, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed register")
 		}
 
 		// 5️⃣ Tambahkan role baru di SQL + Casbin
@@ -197,7 +203,7 @@ func (uu *UserUsecaseImpl) RegisterWithPassword(c context.Context, arg request.R
 			}
 
 			if _, err := uu.cbn.AddRoleForUser(res.ID.String(), roleID.Value, "", "", "", ""); err != nil {
-				return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed add casbin role")
+				return nil, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed add casbin role")
 			}
 		}
 
@@ -209,24 +215,24 @@ func (uu *UserUsecaseImpl) Refresh(c context.Context, refresh string) (any, erro
 
 	isAuthorize, _, err := pkg.IsAuthorized(refresh, uu.cfg.JWT.RefreshTokenSecret)
 	if err != nil {
-		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "checking auth failed")
+		return nil, pkg.WrapError(err, pkg.ErrorCodeUnknown, "checking auth failed")
 	}
 
 	if !isAuthorize {
-		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeInvalidArgument, "UnAuthorize")
+		return nil, pkg.WrapError(err, pkg.ErrorCodeInvalidArgument, "UnAuthorize")
 	}
 	id, err := pkg.ExtractIDFromToken(refresh, uu.cfg.JWT.RefreshTokenSecret)
 	// 3. Convert string -> UUID safely
 	// userUUID, err := uuid.FromString(id)
 	// if err != nil {
-	// 	return nil, pkg.WrapErrorf(err, pkg.ErrorCodeInvalidArgument, "invalid UUID in token")
+	// 	return nil, pkg.WrapError(err, pkg.ErrorCodeInvalidArgument, "invalid UUID in token")
 	// }
 	res, err := uu.db.UsersFindById(c, uuid.Must(uuid.FromString(id)))
 	if err != nil {
 		return nil, err
 	}
 	if res.Refresh == nil {
-		return nil, pkg.WrapErrorf(nil, pkg.ErrorCodeInvalidArgument, "user has no refresh token stored")
+		return nil, pkg.WrapError(nil, pkg.ErrorCodeInvalidArgument, "user has no refresh token stored")
 	}
 	//Return false when refresh token doesn't match
 	if *res.Refresh != refresh {
@@ -250,9 +256,9 @@ func (uu *UserUsecaseImpl) Refresh(c context.Context, refresh string) (any, erro
 		return nil, err
 	}
 
-	view, err := uu.db.GetUserMenuViews(c, res.ID)
+	view, err := uu.db.UserViewPermission(c, res.ID)
 	if err != nil {
-		return resp.User{}, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get menu")
+		return resp.User{}, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed get menu")
 	}
 
 	redisKey := fmt.Sprintf("view:%d", res.ID)
@@ -287,12 +293,12 @@ func (uu *UserUsecaseImpl) AddRoleForUser(c context.Context, u pg.CreateUserRole
 
 		_, err = uu.cbn.AddRoleForUser(u.UserID.String(), utils.Int32ToStr(u.RoleID), "", "", "", "")
 		if err != nil {
-			return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed add role")
+			return nil, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed add role")
 		}
 
 		// res, err := qtx.CreateUserRole(c, u)
 		// if err != nil {
-		// 	return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed register")
+		// 	return nil, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed register")
 		// }
 
 		return nil, nil
@@ -305,12 +311,12 @@ func (uu *UserUsecaseImpl) AddGroupRole(c context.Context, u pg.CreateGroupRoleP
 
 		_, err = uu.cbn.AddNamedGroupingPolicy("g2", utils.Int32ToStr(u.GroupID), utils.Int32ToStr(u.RoleID), "", "", "")
 		if err != nil {
-			return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed add group role")
+			return nil, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed add group role")
 		}
 
 		res, err := qtx.CreateGroupRole(c, u)
 		if err != nil {
-			return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed group role")
+			return nil, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed group role")
 		}
 
 		return res, nil
@@ -323,7 +329,7 @@ func (uu *UserUsecaseImpl) AddMenu(c context.Context, arg pg.CreateR1ViewParams)
 
 		res, err := qtx.CreateR1View(c, arg)
 		if err != nil {
-			return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed create menu")
+			return nil, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed create menu")
 		}
 
 		return res, nil
@@ -334,7 +340,7 @@ func (uu *UserUsecaseImpl) ListMenu(c context.Context, arg request.SearchMenu) (
 
 	res, err := uu.db.ListR1Views(c, arg.Label)
 	if err != nil {
-		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed list menu")
+		return nil, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed list menu")
 	}
 	if len(res) == 0 {
 		return resp.WithPaginate([]string{}, nil), err
@@ -346,7 +352,7 @@ func (uu *UserUsecaseImpl) EditMenu(c context.Context, arg pg.UpdateR1ViewParams
 
 	res, err := uu.db.UpdateR1View(c, arg)
 	if err != nil {
-		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed edit menu")
+		return nil, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed edit menu")
 	}
 	return res, nil
 }
@@ -355,7 +361,7 @@ func (uu *UserUsecaseImpl) DeleteMenu(c context.Context, arg pg.DeleteR1ViewPara
 
 	err := uu.db.DeleteR1View(c, arg)
 	if err != nil {
-		return pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed delete menu")
+		return pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed delete menu")
 	}
 	return nil
 }
@@ -363,16 +369,16 @@ func (uu *UserUsecaseImpl) DeleteMenu(c context.Context, arg pg.DeleteR1ViewPara
 func (uu *UserUsecaseImpl) MenuById(c context.Context, arg int32) (any, error) {
 	res, err := uu.db.GetR1View(c, arg)
 	if err != nil {
-		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get")
+		return nil, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed get")
 	}
 	return resp.WithPaginate(res, nil), nil
 }
 
-func (uu *UserUsecaseImpl) AccessList(c context.Context, arg request.SearchMenu) (any, error) {
+func (uu *UserUsecaseImpl) ListPermission(c context.Context, arg request.SearchMenu) (any, error) {
 
 	res, err := uu.db.GetR1ViewRecursive(c)
 	if err != nil {
-		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed list")
+		return nil, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed list")
 	}
 	tree := resp.BuildMenuTree(res, nil)
 	return resp.WithPaginate(tree, nil), nil
@@ -383,7 +389,7 @@ func (uu *UserUsecaseImpl) AddRole(c context.Context, arg pg.CreateR4RoleParams)
 		// var err error
 		res, err := qtx.CreateR4Role(c, arg)
 		if err != nil {
-			return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed create")
+			return nil, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed create")
 		}
 
 		return res, nil
@@ -395,7 +401,7 @@ func (uu *UserUsecaseImpl) ListRole(c context.Context) (any, error) {
 	// var err error
 	res, err := uu.db.ListR4Roles(c)
 	if err != nil {
-		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed list")
+		return nil, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed list")
 	}
 	if len(res) == 0 {
 		return resp.WithPaginate([]string{}, nil), err
@@ -410,7 +416,7 @@ func (uu *UserUsecaseImpl) UpdateRole(c context.Context, arg pg.UpdateR4RolePara
 	// var err error
 	res, err := uu.db.UpdateR4Role(c, arg)
 	if err != nil {
-		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed update")
+		return nil, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed update")
 	}
 
 	return res, nil
@@ -422,7 +428,7 @@ func (uu *UserUsecaseImpl) GetRoleById(c context.Context, arg int32) (any, error
 	// var err error
 	res, err := uu.db.GetR4RoleByID(c, arg)
 	if err != nil {
-		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get data")
+		return nil, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed get data")
 	}
 
 	return resp.WithPaginate(res, nil), nil
@@ -433,7 +439,7 @@ func (uu *UserUsecaseImpl) DeleteRoleById(c context.Context, arg pg.DeleteR4Role
 	// var err error
 	err := uu.db.DeleteR4Role(c, arg)
 	if err != nil {
-		return pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get data")
+		return pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed get data")
 	}
 
 	return nil
@@ -445,7 +451,7 @@ func (uu *UserUsecaseImpl) AddGroup(c context.Context, arg pg.CreateR2GroupParam
 		// var err error
 		res, err := qtx.CreateR2Group(c, arg)
 		if err != nil {
-			return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed create")
+			return nil, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed create")
 		}
 
 		return res, nil
@@ -457,7 +463,7 @@ func (uu *UserUsecaseImpl) ListGroup(c context.Context) (any, error) {
 	// var err error
 	res, err := uu.db.ListR2Groups(c)
 	if err != nil {
-		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed list")
+		return nil, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed list")
 	}
 	if len(res) == 0 {
 		return resp.WithPaginate([]string{}, nil), err
@@ -472,7 +478,7 @@ func (uu *UserUsecaseImpl) UpdateGroup(c context.Context, arg pg.UpdateR2GroupPa
 	// var err error
 	res, err := uu.db.UpdateR2Group(c, arg)
 	if err != nil {
-		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed update")
+		return nil, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed update")
 	}
 
 	return res, nil
@@ -484,7 +490,7 @@ func (uu *UserUsecaseImpl) GetGroupById(c context.Context, arg int32) (any, erro
 	// var err error
 	res, err := uu.db.GetR2GroupByID(c, arg)
 	if err != nil {
-		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get data")
+		return nil, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed get data")
 	}
 
 	return resp.WithPaginate(res, nil), nil
@@ -495,7 +501,7 @@ func (uu *UserUsecaseImpl) DeleteGroupById(c context.Context, arg pg.DeleteR2Gro
 	// var err error
 	err := uu.db.DeleteR2Group(c, arg)
 	if err != nil {
-		return pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get data")
+		return pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed get data")
 	}
 
 	return nil
@@ -527,7 +533,7 @@ func (uu *UserUsecaseImpl) ListUser(c context.Context, arg request.SearchUser) (
 	}
 	res, err := uu.db.ListUsers(c, params)
 	if err != nil {
-		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed list")
+		return nil, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed list")
 	}
 	if len(res) == 0 {
 		return resp.WithPaginate([]string{}, nil), err
@@ -555,7 +561,7 @@ func (uu *UserUsecaseImpl) UpdateUserPartial(c context.Context, arg request.Upda
 		}
 
 		if err := qtx.UpdateUserPartial(c, params); err != nil {
-			return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed update user")
+			return nil, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed update user")
 		}
 
 		// 2️⃣ Persiapkan list role dari input
@@ -572,13 +578,13 @@ func (uu *UserUsecaseImpl) UpdateUserPartial(c context.Context, arg request.Upda
 			RoleIds: valuesInt, // jika kosong → hapus semua
 		}
 		if err := qtx.DeleteUnRegisterRole(c, darg); err != nil {
-			return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed delete role in SQL")
+			return nil, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed delete role in SQL")
 		}
 
 		// 4️⃣ Hapus role lama di Casbin yang tidak ada di input
 		currentRoles, err := uu.cbn.GetRolesForUser(arg.ID.String())
 		if err != nil {
-			return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get casbin roles")
+			return nil, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed get casbin roles")
 		}
 
 		newRolesSet := make(map[string]struct{})
@@ -589,7 +595,7 @@ func (uu *UserUsecaseImpl) UpdateUserPartial(c context.Context, arg request.Upda
 		for _, r := range currentRoles {
 			if _, ok := newRolesSet[r]; !ok {
 				if _, err := uu.cbn.DeleteRoleForUser(arg.ID.String(), r, "", "", "", ""); err != nil {
-					return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed delete casbin role")
+					return nil, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed delete casbin role")
 				}
 			}
 		}
@@ -610,7 +616,7 @@ func (uu *UserUsecaseImpl) UpdateUserPartial(c context.Context, arg request.Upda
 			}
 
 			if _, err := uu.cbn.AddRoleForUser(arg.ID.String(), roleID.Value, "", "", "", ""); err != nil {
-				return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed add casbin role")
+				return nil, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed add casbin role")
 			}
 		}
 
@@ -623,7 +629,7 @@ func (uu *UserUsecaseImpl) GetUserId(c context.Context, arg uuid.UUID) (any, err
 	// var err error
 	res, err := uu.db.GetUserDetail(c, arg)
 	if err != nil {
-		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get data")
+		return nil, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed get data")
 	}
 
 	return resp.WithPaginate(res, nil), nil
@@ -635,7 +641,7 @@ func (uu *UserUsecaseImpl) GetUserRoleByUserId(c context.Context, arg uuid.UUID)
 	// var err error
 	res, err := uu.db.GetUserRolesByUserID(c, arg)
 	if err != nil {
-		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get data")
+		return nil, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed get data")
 	}
 	if len(res) == 0 {
 		return resp.WithPaginate([]string{}, nil), err
@@ -649,7 +655,7 @@ func (uu *UserUsecaseImpl) GetViewByRoleId(c context.Context, arg int32) (any, e
 	// var err error
 	res, err := uu.db.GetR3ViewRoleByRoleID(c, arg)
 	if err != nil {
-		return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get data")
+		return nil, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed get data")
 	}
 	if len(res) == 0 {
 		return resp.WithPaginate([]string{}, nil), err
@@ -659,13 +665,13 @@ func (uu *UserUsecaseImpl) GetViewByRoleId(c context.Context, arg int32) (any, e
 
 }
 
-func (uu *UserUsecaseImpl) AddRolePolicy(c context.Context, arg request.UpdateRolePolicy) (any, error) {
+func (uu *UserUsecaseImpl) UpdateRolePolicy(c context.Context, arg request.UpdateRolePolicy) (any, error) {
 	return utils.WithTransactionResult(c, uu.pg.Pool, func(qtx *pg.Queries, tx pgx.Tx) (any, error) {
 
 		var err error
 		rows, err := qtx.GetViewsByIdsWithChildren(c, arg.Policy)
 		if err != nil {
-			return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed get data")
+			return nil, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed get data")
 		}
 
 		var (
@@ -688,7 +694,7 @@ func (uu *UserUsecaseImpl) AddRolePolicy(c context.Context, arg request.UpdateRo
 		}
 		err = qtx.ViewRolesSyncDeleteHard(c, darg)
 		if err != nil {
-			return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed delete data")
+			return nil, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed delete data")
 		}
 
 		iarg := pg.ViewRolesSyncInsertHardParams{
@@ -698,7 +704,7 @@ func (uu *UserUsecaseImpl) AddRolePolicy(c context.Context, arg request.UpdateRo
 		}
 		err = qtx.ViewRolesSyncInsertHard(c, iarg)
 		if err != nil {
-			return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed inser data")
+			return nil, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed inser data")
 		}
 		// ======================
 		// ⚙️ 3️⃣ Sync CASBIN POLICY
@@ -709,7 +715,7 @@ func (uu *UserUsecaseImpl) AddRolePolicy(c context.Context, arg request.UpdateRo
 		// Ambil semua policy lama untuk role ini
 		oldPolicies, err := uu.cbn.GetFilteredPolicy(0, roleID)
 		if err != nil {
-			return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed filter policy")
+			return nil, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed filter policy")
 		}
 
 		// Buat policy baru dari hasil query
@@ -745,7 +751,7 @@ func (uu *UserUsecaseImpl) AddRolePolicy(c context.Context, arg request.UpdateRo
 		if len(removeList) > 0 {
 			_, err := uu.cbn.RemovePolicies(removeList)
 			if err != nil {
-				return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed remove old casbin policies")
+				return nil, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed remove old casbin policies")
 			}
 		}
 
@@ -762,7 +768,7 @@ func (uu *UserUsecaseImpl) AddRolePolicy(c context.Context, arg request.UpdateRo
 		if len(addList) > 0 {
 			_, err := uu.cbn.AddPolicies(addList)
 			if err != nil {
-				return nil, pkg.WrapErrorf(err, pkg.ErrorCodeUnknown, "failed add new casbin policies")
+				return nil, pkg.WrapError(err, pkg.ErrorCodeUnknown, "failed add new casbin policies")
 			}
 		}
 
@@ -776,7 +782,7 @@ func (uu *UserUsecaseImpl) AddRolePolicy(c context.Context, arg request.UpdateRo
 	})
 }
 
-func (uu *UserUsecaseImpl) GetViewUser(c context.Context, arg uuid.UUID) (any, error) {
+func (uu *UserUsecaseImpl) UserViewPermission(c context.Context, arg uuid.UUID) (any, error) {
 
 	redisKey := fmt.Sprintf("view:%d", arg)
 
@@ -784,7 +790,7 @@ func (uu *UserUsecaseImpl) GetViewUser(c context.Context, arg uuid.UUID) (any, e
 	val, err := uu.cache.Client.Get(c, redisKey).Result()
 	if err == nil {
 		// Redis ada → unmarshal JSON
-		var views []pg.GetUserMenuViewsRow
+		var views []pg.UserViewPermissionRow
 		if err := json.Unmarshal([]byte(val), &views); err != nil {
 			log.Println("failed unmarshal cached JSON:", err)
 		} else {
@@ -796,7 +802,7 @@ func (uu *UserUsecaseImpl) GetViewUser(c context.Context, arg uuid.UUID) (any, e
 	}
 
 	// 2️⃣ Ambil dari DB
-	views, err := uu.db.GetUserMenuViews(c, arg)
+	views, err := uu.db.UserViewPermission(c, arg)
 	if err != nil {
 		return nil, err
 	}

@@ -10,4 +10,5 @@ const (
 	PostDeleted     = "post.deleted"
 	PostStatus      = "post.status"
 	RMQConsumerName = "typesense-indexer"
+	FailedBindJson  = "failed to bind JSON"
 )
