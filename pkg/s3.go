@@ -12,7 +12,6 @@ import (
 
 func NewS3Storage(cfg *config.Config, log logging.Logger) (*minio.Client, error) {
 
-	//TODO Initialize minio client object.
 	minioClient, err := minio.New(cfg.Minio.EndPoint, &minio.Options{
 		Region: cfg.Minio.Region,
 		Creds:  credentials.NewStaticV4(cfg.Minio.AccessKey, cfg.Minio.SecretKey, ""),
