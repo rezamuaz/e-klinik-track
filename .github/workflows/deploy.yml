@@ -23,32 +23,37 @@ jobs:
           go-version: ${{ secrets.GO_VERSION || '1.24' }}
 
       # 3️⃣ Decide target VPS based on branch
-      - name: Set deployment target
+      - name: Set deployment target based on branch
         id: vars
         run: |
-          if [[ "${GITHUB_REF##*/}" == "main" ]]; then
-            echo "Server A selected for main branch"
+          BRANCH="${GITHUB_REF##*/}"
+          if [[ "$BRANCH" == "main" ]]; then
+            echo "Deploying to Production Server"
             echo "VPS_HOST=${{ secrets.VPS_HOST }}" >> $GITHUB_ENV
             echo "VPS_USER=${{ secrets.VPS_USER }}" >> $GITHUB_ENV
             echo "APP_NAME=${{ secrets.APP_NAME }}" >> $GITHUB_ENV
             echo "APP_PORT=${{ secrets.APP_PORT }}" >> $GITHUB_ENV
-            echo "ENV_FILE_CONTENT=${{ secrets.ENV_FILE_CONTENT }}" >> $GITHUB_ENV
-          elif [[ "${GITHUB_REF##*/}" == "dev" ]]; then
-            echo "Server B selected for dev branch"
+            echo "${{ secrets.ENV_FILE_CONTENT }}" > env_file_content
+          elif [[ "$BRANCH" == "dev" ]]; then
+            echo "Deploying to Development Server"
             echo "VPS_HOST=${{ secrets.VPS_HOST_B }}" >> $GITHUB_ENV
             echo "VPS_USER=${{ secrets.VPS_USER_B }}" >> $GITHUB_ENV
             echo "APP_NAME=${{ secrets.APP_NAME_B }}" >> $GITHUB_ENV
             echo "APP_PORT=${{ secrets.APP_PORT_B }}" >> $GITHUB_ENV
-            echo "ENV_FILE_CONTENT=${{ secrets.ENV_FILE_CONTENT_B }}" >> $GITHUB_ENV
+            echo "${{ secrets.ENV_FILE_CONTENT_B }}" > env_file_content
+          else
+            echo "🚫 No deploy target for this branch."
+            exit 1
           fi
 
-      # 4️⃣ Debug essential variables
-      - name: Debug deployment config
+      # 4️⃣ Debug essential variables (optional)
+      - name: Debug Info
         run: |
-          echo "VPS_HOST=${VPS_HOST}"
-          echo "VPS_USER=${VPS_USER}"
-          echo "APP_NAME=${APP_NAME}"
-          echo "APP_PORT=${APP_PORT}"
+          echo "Branch: ${GITHUB_REF##*/}"
+          echo "VPS_HOST: $VPS_HOST"
+          echo "VPS_USER: $VPS_USER"
+          echo "APP_NAME: $APP_NAME"
+          echo "APP_PORT: $APP_PORT"
 
       # 5️⃣ Build Go binary
       - name: Build Go binary
@@ -58,7 +63,7 @@ jobs:
           go build -o app cmd/main.go
           ls -lh app
 
-      # 6️⃣ Prepare VPS (create app directory and stop old container)
+      # 6️⃣ Prepare directory and stop old container in VPS
       - name: Prepare VPS via SSH
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -82,7 +87,17 @@ jobs:
           source: "./app"
           target: "~/app/app"
 
-      # 8️⃣ Deploy Go app in Podman
+      # Upload .env file
+      - name: Upload .env file
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ env.VPS_HOST }}
+          username: ${{ env.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: "env_file_content"
+          target: "~/app/.env"
+
+      # 8️⃣ Deploy Go app with Podman
       - name: Run Podman container
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -90,18 +105,11 @@ jobs:
           username: ${{ env.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
-            echo "🚀 Running Go app in Podman..."
-
             cd ~/app
 
-            # Create .env file if available
-            if [ ! -z "${{ env.ENV_FILE_CONTENT }}" ]; then
-              echo "${{ env.ENV_FILE_CONTENT }}" > .env
-            fi
-
             # Create Dockerfile
-            cat > Dockerfile <<'EOF'
-            FROM golang:1.24
+            cat > Dockerfile <<EOF
+            FROM golang:${{ secrets.GO_VERSION || '1.24' }}
             WORKDIR /app
             COPY app .
             COPY .env .env
@@ -117,4 +125,4 @@ jobs:
               --env-file /home/${{ env.VPS_USER }}/app/.env \
               ${{ env.APP_NAME }}:latest
 
-            echo "✅ App running on port ${{ env.APP_PORT }}"
+            echo "✅ ${{ env.APP_NAME }} is running on port ${{ env.APP_PORT }}"
