@@ -1,0 +1,131 @@
+name: Build & Deploy Go App to AlmaLinux VPS (Podman)
+
+on:
+  push:
+    branches:
+      - dev # Hanya berjalan untuk branch dev
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment: deploy
+
+    steps:
+      # 1️⃣ Checkout source code
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      # 2️⃣ Setup Go
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ secrets.GO_VERSION || '1.24' }}
+
+      # 3️⃣ Debug all secrets (APP_NAME dan APP_PORT diganti)
+      - name: Debug all GitHub Secrets
+        run: |
+          echo "🔍 DEBUGGING ALL SECRETS"
+          echo "------------------------------------"
+          echo "VPS_HOST: ${{ secrets.VPS_HOST }}"
+          echo "VPS_USER: ${{ secrets.VPS_USER }}"
+          echo "APP_NAME_DEV: ${{ secrets.APP_NAME_DEV }}" # ✅ DIGANTI
+          echo "APP_PORT_DEV: ${{ secrets.APP_PORT_DEV }}" # ✅ DIGANTI
+          echo "GO_VERSION: ${{ secrets.GO_VERSION }}"
+          echo "TZ: ${{ secrets.TZ }}"
+          echo "------------------------------------"
+          # Periksa SSH Key
+          if [ -z "${{ secrets.VPS_SSH_KEY }}" ]; then
+            echo "❌ VPS_SSH_KEY is empty!"
+          else
+            echo "✅ VPS_SSH_KEY is loaded (hidden)"
+          fi
+          # Periksa ENV file
+          if [ -z "${{ secrets.ENV_FILE_CONTENT }}" ]; then
+            echo "❌ ENV_FILE_CONTENT is empty!"
+          else
+            echo "✅ ENV_FILE_CONTENT is loaded (hidden)"
+          fi
+          # Pastikan host & user tidak kosong
+          if [ -z "${{ secrets.VPS_HOST }}" ]; then
+            echo "❌ VPS_HOST is empty!"
+            exit 1
+          fi
+          if [ -z "${{ secrets.VPS_USER }}" ]; then
+            echo "❌ VPS_USER is empty!"
+            exit 1
+          fi
+          echo "✅ All essential secrets loaded successfully!"
+          echo "------------------------------------"
+      
+      # 4️⃣ Build Go binary
+      - name: Build Go binary
+        run: |
+          echo "🏗️ Building Go app..."
+          go mod tidy
+          go build -o app cmd/main.go
+          ls -lh app
+          
+      # 5️⃣ Deploy ke VPS (buat direktori & stop container lama)
+      - name: Prepare VPS via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            APP_NAME=${{ secrets.APP_NAME_DEV || 'api-server-dev' }} # ✅ Ambil nama app Development
+            
+            echo "🚀 Preparing VPS environment..."
+            mkdir -p ~/app
+            cd ~/app
+            podman stop ${APP_NAME} || true # ✅ GUNAKAN VARIABEL BARU
+            podman rm ${APP_NAME} || true   # ✅ GUNAKAN VARIABEL BARU
+            
+      # 6️⃣ Upload binary ke VPS
+      - name: Upload binary
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: "./app"
+          target: "~/app/app"
+
+      # 7️⃣ Jalankan container baru di VPS (APP_NAME dan APP_PORT diganti)
+      - name: Run Podman container
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            PORT_DEV=${{ secrets.APP_PORT_DEV || '7777' }} # ✅ Ambil port Development
+            APP_NAME=${{ secrets.APP_NAME_DEV || 'api-server-dev' }} # ✅ Ambil nama app Development
+
+            echo "🚀 Running Go app in Podman..."
+            cd ~/app
+            
+            # Buat .env dari secret
+            if [ ! -z "${{ secrets.ENV_FILE_CONTENT }}" ]; then
+              echo "${{ secrets.ENV_FILE_CONTENT }}" > .env
+            fi
+            
+            # Buat Dockerfile
+            cat > Dockerfile <<'EOF'
+            FROM golang:1.24
+            WORKDIR /app
+            COPY app .
+            COPY .env .env
+            ENV TZ=${{ secrets.TZ || 'Asia/Jakarta' }}
+            EXPOSE ${PORT_DEV} 
+            CMD ["./app"]
+            EOF
+            
+            podman build -t ${APP_NAME}:latest . # ✅ GUNAKAN VARIABEL BARU
+            podman run -d --name ${APP_NAME} \ # ✅ GUNAKAN VARIABEL BARU
+              -p ${PORT_DEV}:${PORT_DEV} \ # ✅ GUNAKAN VARIABEL PORT BARU
+              --network e-klinik-track_e-klinik \
+              --env-file /home/almalinux/.env \
+              ${APP_NAME}:latest # ✅ GUNAKAN VARIABEL BARU
+              
+            echo "✅ App is running on port ${PORT_DEV}"
