@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - dev
 
 jobs:
   build-and-deploy:
@@ -22,38 +21,41 @@ jobs:
         with:
           go-version: ${{ secrets.GO_VERSION || '1.24' }}
 
-      # 3️⃣ Decide target VPS based on branch
-      - name: Set deployment target based on branch
-        id: vars
+      # 3️⃣ Debug all secrets
+      - name: Debug all GitHub Secrets
         run: |
-          BRANCH="${GITHUB_REF##*/}"
-          if [[ "$BRANCH" == "main" ]]; then
-            echo "Deploying to Production Server"
-            echo "VPS_HOST=${{ secrets.VPS_HOST }}" >> $GITHUB_ENV
-            echo "VPS_USER=${{ secrets.VPS_USER }}" >> $GITHUB_ENV
-            echo "APP_NAME=${{ secrets.APP_NAME }}" >> $GITHUB_ENV
-            echo "APP_PORT=${{ secrets.APP_PORT }}" >> $GITHUB_ENV
-            echo "${{ secrets.ENV_FILE_CONTENT }}" > env_file_content
-          elif [[ "$BRANCH" == "dev" ]]; then
-            echo "Deploying to Development Server"
-            echo "VPS_HOST=${{ secrets.VPS_HOST_B }}" >> $GITHUB_ENV
-            echo "VPS_USER=${{ secrets.VPS_USER_B }}" >> $GITHUB_ENV
-            echo "APP_NAME=${{ secrets.APP_NAME_B }}" >> $GITHUB_ENV
-            echo "APP_PORT=${{ secrets.APP_PORT_B }}" >> $GITHUB_ENV
-            echo "${{ secrets.ENV_FILE_CONTENT_B }}" > env_file_content
+          echo "🔍 DEBUGGING ALL SECRETS"
+          echo "------------------------------------"
+          echo "VPS_HOST: ${{ secrets.VPS_HOST }}"
+          echo "VPS_USER: ${{ secrets.VPS_USER }}"
+          echo "APP_NAME: ${{ secrets.APP_NAME }}"
+          echo "APP_PORT: ${{ secrets.APP_PORT }}"
+          echo "GO_VERSION: ${{ secrets.GO_VERSION }}"
+          echo "TZ: ${{ secrets.TZ }}"
+          echo "------------------------------------"
+          # Periksa SSH Key
+          if [ -z "${{ secrets.VPS_SSH_KEY }}" ]; then
+            echo "❌ VPS_SSH_KEY is empty!"
           else
-            echo "🚫 No deploy target for this branch."
+            echo "✅ VPS_SSH_KEY is loaded (hidden)"
+          fi
+          # Periksa ENV file
+          if [ -z "${{ secrets.ENV_FILE_CONTENT }}" ]; then
+            echo "❌ ENV_FILE_CONTENT is empty!"
+          else
+            echo "✅ ENV_FILE_CONTENT is loaded (hidden)"
+          fi
+          # Pastikan host & user tidak kosong
+          if [ -z "${{ secrets.VPS_HOST }}" ]; then
+            echo "❌ VPS_HOST is empty!"
             exit 1
           fi
-      # 4️⃣ Debug essential variables (optional)
-      - name: Debug Info
-        run: |
-          echo "Branch: ${GITHUB_REF##*/}"
-          echo "VPS_HOST: $VPS_HOST"
-          echo "VPS_USER: $VPS_USER"
-          echo "APP_NAME: $APP_NAME"
-          echo "APP_PORT: $APP_PORT"
-
+          if [ -z "${{ secrets.VPS_USER }}" ]; then
+            echo "❌ VPS_USER is empty!"
+            exit 1
+          fi
+          echo "✅ All essential secrets loaded successfully!"
+          echo "------------------------------------"
       # 4️⃣ Build Go binary
       - name: Build Go binary
         run: |
@@ -61,7 +63,6 @@ jobs:
           go mod tidy
           go build -o app cmd/main.go
           ls -lh app
-
       # 5️⃣ Deploy ke VPS (buat direktori & stop container lama)
       - name: Prepare VPS via SSH
         uses: appleboy/ssh-action@v1.2.0
@@ -75,7 +76,6 @@ jobs:
             cd ~/app
             podman stop ${{ secrets.APP_NAME || 'api-server' }} || true
             podman rm ${{ secrets.APP_NAME || 'api-server' }} || true
-
       # 6️⃣ Upload binary ke VPS
       - name: Upload binary
         uses: appleboy/scp-action@v0.1.4
@@ -95,14 +95,11 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
             echo "🚀 Running Go app in Podman..."
-
             cd ~/app
-
             # Buat .env dari secret
             if [ ! -z "${{ secrets.ENV_FILE_CONTENT }}" ]; then
               echo "${{ secrets.ENV_FILE_CONTENT }}" > .env
             fi
-
             # Buat Dockerfile
             cat > Dockerfile <<'EOF'
             FROM golang:1.24
@@ -113,12 +110,10 @@ jobs:
             EXPOSE ${{ secrets.APP_PORT || '7777' }}
             CMD ["./app"]
             EOF
-
             podman build -t ${{ secrets.APP_NAME || 'api-server' }}:latest .
             podman run -d --name ${{ secrets.APP_NAME || 'api-server' }} \
               -p ${{ secrets.APP_PORT || '7777' }}:${{ secrets.APP_PORT || '7777' }} \
               --network e-klinik-track_e-klinik \
               --env-file /home/deploy/.env \
               ${{ secrets.APP_NAME || 'api-server' }}:latest
-
             echo "✅ App is running on port ${{ secrets.APP_PORT || '7777' }}"
