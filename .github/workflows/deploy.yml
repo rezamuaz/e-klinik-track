@@ -8,7 +8,7 @@ on:
 
 jobs:
   build-and-deploy:
-    runs-on: ubuntu-latest
+    runs-on: almalinux-10
     environment: deploy
 
     steps:
@@ -45,7 +45,6 @@ jobs:
             echo "🚫 No deploy target for this branch."
             exit 1
           fi
-
       # 4️⃣ Debug essential variables (optional)
       - name: Debug Info
         run: |
@@ -55,7 +54,7 @@ jobs:
           echo "APP_NAME: $APP_NAME"
           echo "APP_PORT: $APP_PORT"
 
-      # 5️⃣ Build Go binary
+      # 4️⃣ Build Go binary
       - name: Build Go binary
         run: |
           echo "🏗️ Building Go app..."
@@ -63,66 +62,63 @@ jobs:
           go build -o app cmd/main.go
           ls -lh app
 
-      # 6️⃣ Prepare directory and stop old container in VPS
+      # 5️⃣ Deploy ke VPS (buat direktori & stop container lama)
       - name: Prepare VPS via SSH
         uses: appleboy/ssh-action@v1.2.0
         with:
-          host: ${{ env.VPS_HOST }}
-          username: ${{ env.VPS_USER }}
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
             echo "🚀 Preparing VPS environment..."
             mkdir -p ~/app
             cd ~/app
-            podman stop ${{ env.APP_NAME }} || true
-            podman rm ${{ env.APP_NAME }} || true
+            podman stop ${{ secrets.APP_NAME || 'api-server' }} || true
+            podman rm ${{ secrets.APP_NAME || 'api-server' }} || true
 
-      # 7️⃣ Upload binary to VPS
+      # 6️⃣ Upload binary ke VPS
       - name: Upload binary
         uses: appleboy/scp-action@v0.1.4
         with:
-          host: ${{ env.VPS_HOST }}
-          username: ${{ env.VPS_USER }}
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           source: "./app"
           target: "~/app/app"
 
-      # Upload .env file
-      - name: Upload .env file
-        uses: appleboy/scp-action@v0.1.4
-        with:
-          host: ${{ env.VPS_HOST }}
-          username: ${{ env.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          source: "env_file_content"
-          target: "~/app/.env"
-
-      # 8️⃣ Deploy Go app with Podman
+      # 7️⃣ Jalankan container baru di VPS
       - name: Run Podman container
         uses: appleboy/ssh-action@v1.2.0
         with:
-          host: ${{ env.VPS_HOST }}
-          username: ${{ env.VPS_USER }}
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
+            echo "🚀 Running Go app in Podman..."
+
             cd ~/app
 
-            # Create Dockerfile
-            cat > Dockerfile <<EOF
-            FROM golang:${{ secrets.GO_VERSION || '1.24' }}
+            # Buat .env dari secret
+            if [ ! -z "${{ secrets.ENV_FILE_CONTENT }}" ]; then
+              echo "${{ secrets.ENV_FILE_CONTENT }}" > .env
+            fi
+
+            # Buat Dockerfile
+            cat > Dockerfile <<'EOF'
+            FROM golang:1.24
             WORKDIR /app
             COPY app .
             COPY .env .env
             ENV TZ=${{ secrets.TZ || 'Asia/Jakarta' }}
-            EXPOSE ${{ env.APP_PORT }}
+            EXPOSE ${{ secrets.APP_PORT || '7777' }}
             CMD ["./app"]
             EOF
 
-            podman build -t ${{ env.APP_NAME }}:latest .
-            podman run -d --name ${{ env.APP_NAME }} \
-              -p ${{ env.APP_PORT }}:${{ env.APP_PORT }} \
+            podman build -t ${{ secrets.APP_NAME || 'api-server' }}:latest .
+            podman run -d --name ${{ secrets.APP_NAME || 'api-server' }} \
+              -p ${{ secrets.APP_PORT || '7777' }}:${{ secrets.APP_PORT || '7777' }} \
               --network e-klinik-track_e-klinik \
-              --env-file /home/${{ env.VPS_USER }}/app/.env \
-              ${{ env.APP_NAME }}:latest
+              --env-file /home/deploy/.env \
+              ${{ secrets.APP_NAME || 'api-server' }}:latest
 
-            echo "✅ ${{ env.APP_NAME }} is running on port ${{ env.APP_PORT }}"
+            echo "✅ App is running on port ${{ secrets.APP_PORT || '7777' }}"
