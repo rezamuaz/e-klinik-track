@@ -14,7 +14,7 @@ services:
     networks:
       -  e-klinik
     volumes:
-      - pgeklinik:/var/lib/postgresql/data
+      - pgeklinik:/var/lib/postgresql/data:Z
       # - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     command: ["postgres", "-c", "listen_addresses=0.0.0.0"]
     healthcheck:
@@ -34,7 +34,7 @@ services:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}    # Custom username
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
     volumes:
-      - rabbitmq_eklinik:/var/lib/rabbitmq
+      - rabbitmq_eklinik:/var/lib/rabbitmq:Z
     restart: always
     networks:
       - e-klinik
@@ -51,7 +51,7 @@ services:
     networks:
       -  e-klinik
     volumes:
-      - typesense-eklinik:/data
+      - typesense-eklinik:/data:Z
     ports:
       - "8108:8108"
     command: '--data-dir /data --api-key=wOk5BzIhew1eaSJf --enable-cors'
