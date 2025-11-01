@@ -98,6 +98,9 @@ func HttpServer(cfg *config.Config, rmq *pkg.RabbitMQ, pg *pkg.Postgres) {
 	}
 	server.Addr = net.JoinHostPort("", cfg.Server.ExternalPort)
 
+	// ✅ MENAMPILKAN PORT SAAT INI DI LOG
+	log.Printf("🚀 Starting HTTP server on %s...", server.Addr)
+
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt)
 
