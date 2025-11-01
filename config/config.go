@@ -130,9 +130,17 @@ func NewConfig() *Config {
 	cwd := projectRoot()
 	envFilePath := cwd + ".env"
 
-	err := readEnv(envFilePath, cfg)
-	if err != nil {
-		panic(err)
+	if checkFileExists(envFilePath) {
+		if err := cleanenv.ReadConfig(envFilePath, cfg); err != nil {
+			panic(fmt.Errorf("config file error: %w", err))
+		}
+	}
+
+	// 2. Baca/Timpa dari Environment Variable (ENV) sistem
+	//    Ini akan menimpa nilai dari file .env (jika ada) dan mengambil nilai dari Podman
+	if err := cleanenv.ReadEnv(cfg); err != nil {
+		// Logika ini harus disesuaikan, tapi intinya: selalu baca ENV sistem
+		panic(fmt.Errorf("environment variable error: %w", err))
 	}
 
 	return cfg
