@@ -114,6 +114,6 @@ jobs:
             podman run -d --name ${{ secrets.APP_NAME || 'api-server' }} \
               -p ${{ secrets.APP_PORT || '7777' }}:${{ secrets.APP_PORT || '7777' }} \
               --network e-klinik-track_e-klinik \
-              --env-file /home/deploy/.env \
+              --env-file /home/almalinux/.env \
               ${{ secrets.APP_NAME || 'api-server' }}:latest
             echo "✅ App is running on port ${{ secrets.APP_PORT || '7777' }}"
