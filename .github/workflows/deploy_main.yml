@@ -92,8 +92,6 @@ jobs:
             podman run -d --name ${APP_NAME} \
               -p ${APP_PORT}:${APP_PORT} \
               --network e-klinik \
-              
-              # --- INJEKSI ENV KE CONTAINER DENGAN PURE SECRET ---
               --env APP_MODE=prod \
               --env EXTERNAL_PORT=${APP_PORT} \
               --env CONTEXT_TIMEOUT=${{ secrets.CONTEXT_TIMEOUT }} \
@@ -131,7 +129,6 @@ jobs:
               --env TYPESENSE_PORT=${{ secrets.TYPESENSE_PORT }} \
               --env TYPESENSE_API_KEY=${{ secrets.TYPESENSE_API_KEY }} \
               --env MEILI_IMAGE_HOST=${{ secrets.MEILI_IMAGE_HOST }} \
-
               ${APP_NAME}:latest
 
             echo "--- VERIFIKASI CONTAINER BERJALAN ---"
