@@ -5,17 +5,12 @@ on:
     branches:
       - main # HANYA berjalan untuk branch main (Production)
 
-# BLOK ENV DIHAPUS
-
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     environment: deploy
 
     steps:
-      # ... (Langkah 1 sampai 6 tetap sama) ...
-      
-      # 7️⃣ Run Podman container
       - name: Run Podman container
         uses: appleboy/ssh-action@v1.2.0
         with:
