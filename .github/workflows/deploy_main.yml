@@ -54,7 +54,7 @@ jobs:
           source: "./app"
           target: "~/app/app"
 
-      # 6️⃣ Run Podman container (Step yang Anda fokuskan)
+      # 6️⃣ Run Podman container
       - name: Run Podman container
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -62,13 +62,12 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           
-          # ✅ Nilai dengan Fallback Dievaluasi di Sini
+          # Indentasi ENV di sini menggunakan 6 spasi
           env:
             APP_PORT: ${{ secrets.EXTERNAL_PORT || 7777 }}
             APP_NAME: ${{ secrets.APP_NAME || 'api-server' }}
             TZ_VAL: ${{ secrets.TZ || 'Asia/Jakarta' }}
             
-            # Variabel yang membutuhkan Fallback Hardcode
             CONTEXT_TIMEOUT: ${{ secrets.CONTEXT_TIMEOUT || 30 }}
             JWT_ACCESS_TOKEN_EXPIRY_HOUR: ${{ secrets.JWT_ACCESS_TOKEN_EXPIRY_HOUR || 5 }}
             JWT_REFRESH_TOKEN_EXPIRY_HOUR: ${{ secrets.JWT_REFRESH_TOKEN_EXPIRY_HOUR || 168 }}
@@ -84,8 +83,9 @@ jobs:
             IMAGOR_PORT: ${{ secrets.IMAGOR_PORT || 8000 }}
             TYPESENSE_PORT: ${{ secrets.TYPESENSE_PORT || 8108 }}
 
+          # Indentasi script: | menggunakan 6 spasi
           script: |
-            # 1. Gunakan variabel yang sudah dievaluasi (shell sederhana)
+            # Baris di dalam script: | di-indentasi 1 spasi lagi (total 7 spasi dari margin kiri)
             APP_PORT=$APP_PORT
             APP_NAME=$APP_NAME
             
@@ -107,12 +107,11 @@ jobs:
             echo "--- VERIFIKASI IMAGE TERBARU ---"
             podman images | grep ${APP_NAME}
 
-            # 3. Run container with combined env variables
+            # 3. Run container
             podman run -d --name ${APP_NAME} \
               -p ${APP_PORT}:${APP_PORT} \
               --network e-klinik \
               
-              # --- INJEKSI ENV KE CONTAINER ---
               --env APP_MODE=prod \
               --env EXTERNAL_PORT=${APP_PORT} \
               --env CONTEXT_TIMEOUT=${CONTEXT_TIMEOUT} \
