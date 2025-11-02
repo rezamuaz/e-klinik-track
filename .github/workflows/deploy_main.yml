@@ -1,9 +1,9 @@
-name: Build & Deploy Go App to AlmaLinux VPS (Podman)
+name: Build & Deploy Go App to AlmaLinux VPS (Podman) - PROD
 
 on:
   push:
     branches:
-      - main
+      - main # HANYA berjalan untuk branch main (Production)
 
 jobs:
   build-and-deploy:
@@ -21,49 +21,15 @@ jobs:
         with:
           go-version: ${{ secrets.GO_VERSION || '1.24' }}
 
-      # 3️⃣ Debug all secrets
-      - name: Debug all GitHub Secrets
-        run: |
-          echo "🔍 DEBUGGING ALL SECRETS"
-          echo "------------------------------------"
-          echo "VPS_HOST: ${{ secrets.VPS_HOST }}"
-          echo "VPS_USER: ${{ secrets.VPS_USER }}"
-          echo "APP_NAME: ${{ secrets.APP_NAME }}"
-          echo "APP_PORT: ${{ secrets.APP_PORT }}"
-          echo "GO_VERSION: ${{ secrets.GO_VERSION }}"
-          echo "TZ: ${{ secrets.TZ }}"
-          echo "------------------------------------"
-          # Periksa SSH Key
-          if [ -z "${{ secrets.VPS_SSH_KEY }}" ]; then
-            echo "❌ VPS_SSH_KEY is empty!"
-          else
-            echo "✅ VPS_SSH_KEY is loaded (hidden)"
-          fi
-          # Periksa ENV file
-          if [ -z "${{ secrets.ENV_FILE_CONTENT }}" ]; then
-            echo "❌ ENV_FILE_CONTENT is empty!"
-          else
-            echo "✅ ENV_FILE_CONTENT is loaded (hidden)"
-          fi
-          # Pastikan host & user tidak kosong
-          if [ -z "${{ secrets.VPS_HOST }}" ]; then
-            echo "❌ VPS_HOST is empty!"
-            exit 1
-          fi
-          if [ -z "${{ secrets.VPS_USER }}" ]; then
-            echo "❌ VPS_USER is empty!"
-            exit 1
-          fi
-          echo "✅ All essential secrets loaded successfully!"
-          echo "------------------------------------"
-      # 4️⃣ Build Go binary
+      # 3️⃣ Build Go binary
       - name: Build Go binary
         run: |
           echo "🏗️ Building Go app..."
           go mod tidy
           go build -o app cmd/main.go
           ls -lh app
-      # 5️⃣ Deploy ke VPS (buat direktori & stop container lama)
+
+      # 4️⃣ Prepare VPS (create app dir, stop/remove old container)
       - name: Prepare VPS via SSH
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -74,9 +40,11 @@ jobs:
             echo "🚀 Preparing VPS environment..."
             mkdir -p ~/app
             cd ~/app
+            podman network create e-klinik || true 
             podman stop ${{ secrets.APP_NAME || 'api-server' }} || true
             podman rm ${{ secrets.APP_NAME || 'api-server' }} || true
-      # 6️⃣ Upload binary ke VPS
+
+      # 5️⃣ Upload binary
       - name: Upload binary
         uses: appleboy/scp-action@v0.1.4
         with:
@@ -86,34 +54,84 @@ jobs:
           source: "./app"
           target: "~/app/app"
 
-      # 7️⃣ Jalankan container baru di VPS
+      # 6️⃣ Run Podman container
       - name: Run Podman container
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          
+          # ❌ BLOK ENV DIHAPUS SEPENUHNYA
+
           script: |
+            # 1. Tentukan variabel dari Secrets
+            APP_PORT=${{ secrets.EXTERNAL_PORT }}
+            APP_NAME=${{ secrets.APP_NAME }}
+            TZ_VAL=${{ secrets.TZ }}
+            
             echo "🚀 Running Go app in Podman..."
             cd ~/app
-            # Buat .env dari secret
-            if [ ! -z "${{ secrets.ENV_FILE_CONTENT }}" ]; then
-              echo "${{ secrets.ENV_FILE_CONTENT }}" > .env
-            fi
-            # Buat Dockerfile
-            cat > Dockerfile <<'EOF'
+            
+            # 2. Build Dockerfile
+            cat > Dockerfile <<EOF
             FROM golang:1.24
             WORKDIR /app
             COPY app .
-            COPY .env .env
-            ENV TZ=${{ secrets.TZ || 'Asia/Jakarta' }}
-            EXPOSE ${{ secrets.APP_PORT || '7777' }}
+            ENV TZ=${TZ_VAL}
+            EXPOSE ${APP_PORT}
             CMD ["./app"]
             EOF
-            podman build -t ${{ secrets.APP_NAME || 'api-server' }}:latest .
-            podman run -d --name ${{ secrets.APP_NAME || 'api-server' }} \
-              -p ${{ secrets.APP_PORT || '7777' }}:${{ secrets.APP_PORT || '7777' }} \
-              --network e-klinik-track_e-klinik \
-              --env-file /home/almalinux/.env \
-              ${{ secrets.APP_NAME || 'api-server' }}:latest
-            echo "✅ App is running on port ${{ secrets.APP_PORT || '7777' }}"
+
+            podman build -t ${APP_NAME}:latest .
+
+            echo "--- VERIFIKASI IMAGE TERBARU ---"
+            podman images | grep ${APP_NAME}
+
+            # 3. Run container with pure secrets
+            podman run -d --name ${APP_NAME} \
+              -p ${APP_PORT}:${APP_PORT} \
+              --network e-klinik \
+              --env APP_MODE=prod \
+              --env EXTERNAL_PORT=${APP_PORT} \
+              --env CONTEXT_TIMEOUT=${{ secrets.CONTEXT_TIMEOUT }} \
+              --env JWT_ACCESS_TOKEN_EXPIRY_HOUR=${{ secrets.JWT_ACCESS_TOKEN_EXPIRY_HOUR }} \
+              --env JWT_REFRESH_TOKEN_EXPIRY_HOUR=${{ secrets.JWT_REFRESH_TOKEN_EXPIRY_HOUR }} \
+              --env JWT_SECRET=${{ secrets.JWT_SECRET }} \
+              --env PG_USERNAME=${{ secrets.PG_USERNAME }} \
+              --env PG_PASSWORD=${{ secrets.PG_PASSWORD }} \
+              --env PG_POOLMAX=${{ secrets.PG_POOLMAX }} \
+              --env PG_PORT=${{ secrets.PG_PORT }} \
+              --env PG_HOST=${{ secrets.PG_HOST }} \
+              --env PG_NAME=${{ secrets.PG_NAME }} \
+              --env PG_SSL=${{ secrets.PG_SSL }} \
+              --env PG_MIGRATION_URL=${{ secrets.PG_MIGRATION_URL }} \
+              --env MINIO_ENDPOINT=${{ secrets.MINIO_ENDPOINT }} \
+              --env MINIO_ACCESS_KEY=${{ secrets.MINIO_ACCESS_KEY }} \
+              --env MINIO_SECRET_KEY=${{ secrets.MINIO_SECRET_KEY }} \
+              --env MINIO_BUCKET1=${{ secrets.MINIO_BUCKET1 }} \
+              --env MINIO_BUCKET2=${{ secrets.MINIO_BUCKET2 }} \
+              --env MINIO_REGION=${{ secrets.MINIO_REGION }} \
+              --env MINIO_SSL=${{ secrets.MINIO_SSL }} \
+              --env LOG_LEVEL=${{ secrets.LOG_LEVEL }} \
+              --env LOGGER=${{ secrets.LOGGER }} \
+              --env REDIS_HOST=${{ secrets.REDIS_HOST }} \
+              --env REDIS_PORT=${{ secrets.REDIS_PORT }} \
+              --env REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }} \
+              --env REDIS_TIMEOUT=${{ secrets.REDIS_TIMEOUT }} \
+              --env RABBITMQ_USER=${{ secrets.RABBITMQ_USER }} \
+              --env RABBITMQ_PASSWORD=${{ secrets.RABBITMQ_PASSWORD }} \
+              --env RABBITMQ_HOST=${{ secrets.RABBITMQ_HOST }} \
+              --env RABBITMQ_PORT=${{ secrets.RABBITMQ_PORT }} \
+              --env IMAGOR_HOST=${{ secrets.IMAGOR_HOST }} \
+              --env IMAGOR_PORT=${{ secrets.IMAGOR_PORT }} \
+              --env TYPESENSE_HOST=${{ secrets.TYPESENSE_HOST }} \
+              --env TYPESENSE_PORT=${{ secrets.TYPESENSE_PORT }} \
+              --env TYPESENSE_API_KEY=${{ secrets.TYPESENSE_API_KEY }} \
+              --env MEILI_IMAGE_HOST=${{ secrets.MEILI_IMAGE_HOST }} \
+              ${APP_NAME}:latest
+
+            echo "--- VERIFIKASI CONTAINER BERJALAN ---"
+            podman ps -a | grep ${APP_NAME}
+            
+            echo "✅ App is running on port ${APP_PORT}"

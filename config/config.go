@@ -130,11 +130,49 @@ func NewConfig() *Config {
 	cwd := projectRoot()
 	envFilePath := cwd + ".env"
 
-	err := readEnv(envFilePath, cfg)
-	if err != nil {
-		panic(err)
+	// 1. Baca ENV sistem (untuk mendapatkan APP_MODE)
+	// Gunakan ReadEnv() terlebih dahulu untuk memastikan kita tahu mode yang sedang berjalan
+	if err := cleanenv.ReadEnv(cfg); err != nil {
+		// Handle error, atau biarkan mode kosong/default jika tidak ada ENV sama sekali
+		fmt.Fprintf(os.Stderr, "Error reading system ENV (might be normal if running locally): %v\n", err)
 	}
 
+	// Tentukan mode yang berjalan (Fallback ke 'dev' jika kosong)
+	appMode := cfg.Server.RunMode
+	if appMode == "" {
+		appMode = "debug"
+	}
+
+	// 2. Terapkan Logika Prioritas Berdasarkan Mode
+
+	switch appMode {
+	case "debug":
+		// Jika mode adalah Development, coba baca dari file .env dulu sebagai prioritas
+		if checkFileExists(envFilePath) {
+			fmt.Println("[Config] 💡 Mode: DEV. Loading from local .env file.")
+			if err := cleanenv.ReadConfig(envFilePath, cfg); err != nil {
+				panic(fmt.Errorf("config file error: %w", err))
+			}
+		}
+		// Kemudian, timpa nilai .env dengan ENV sistem (Podman ENV) jika ada
+		if err := cleanenv.ReadEnv(cfg); err != nil {
+			// Lanjutkan, karena kita sudah mencoba readEnv di awal
+		}
+
+	case "prod":
+		// Jika mode adalah Production (di Podman), HANYA baca dari ENV sistem
+		fmt.Println("[Config] 🏭 Mode: PROD. Loading exclusively from system ENV.")
+		if err := cleanenv.ReadEnv(cfg); err != nil {
+			panic(fmt.Errorf("environment variable error in PROD mode: %w", err))
+		}
+	}
+
+	// Verifikasi Port setelah loading selesai
+	if cfg.Server.ExternalPort == "" {
+		// Jika port masih kosong (karena APP_PORT tidak ada di .env maupun ENV sistem)
+		fmt.Println("[Config] ⚠️ ExternalPort not set. Falling back to default 7777.")
+		cfg.Server.ExternalPort = "7777" // Set default fallback di sini
+	}
 	return cfg
 }
 

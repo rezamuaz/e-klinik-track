@@ -29,7 +29,7 @@ type Initialized struct {
 func NewApiRouter(cfg *config.Config, h *Initialized, cb *casbin.Enforcer, rdb *pkg.RedisCache) *pkg.Server {
 
 	// arangoC := pkg.NewArangoDatabase(cfg)
-	gin.SetMode(cfg.Server.RunMode)
+	gin.SetMode("debug")
 	r := gin.Default()
 	r.GET("/", func(c *gin.Context) {
 		c.String(200, "Hello, World!!!")

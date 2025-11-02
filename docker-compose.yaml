@@ -110,7 +110,8 @@ services:
   #     - MINIO_ROOT_PASSWORD=destiny13
   #     - MINIO_DEFAULT_BUCKETS=astro
 networks:
-  e-klinik:
+  e-klinik: 
+    name: e-klinik
     driver: bridge  
 
 volumes:
