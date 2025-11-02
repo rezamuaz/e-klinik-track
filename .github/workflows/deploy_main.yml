@@ -11,6 +11,50 @@ jobs:
     environment: deploy
 
     steps:
+      # 1️⃣ Checkout source code
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      # 2️⃣ Setup Go
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ secrets.GO_VERSION || '1.24' }}
+
+      # 3️⃣ Build Go binary
+      - name: Build Go binary
+        run: |
+          echo "🏗️ Building Go app..."
+          go mod tidy
+          go build -o app cmd/main.go
+          ls -lh app
+
+      # 4️⃣ Prepare VPS (create app dir, stop/remove old container)
+      - name: Prepare VPS via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            echo "🚀 Preparing VPS environment..."
+            mkdir -p ~/app
+            cd ~/app
+            podman network create e-klinik || true 
+            podman stop ${{ secrets.APP_NAME || 'api-server' }} || true
+            podman rm ${{ secrets.APP_NAME || 'api-server' }} || true
+
+      # 5️⃣ Upload binary
+      - name: Upload binary
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: "./app"
+          target: "~/app/app"
+
+      # 6️⃣ Run Podman container (Step yang Anda fokuskan)
       - name: Run Podman container
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -18,14 +62,13 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           
-          # ✅ PERBAIKAN: SEMUA NILAI DENGAN FALLBACK DIEVALUASI DI SINI
+          # ✅ Nilai dengan Fallback Dievaluasi di Sini
           env:
-            # Nilai yang akan digunakan di script
             APP_PORT: ${{ secrets.EXTERNAL_PORT || 7777 }}
             APP_NAME: ${{ secrets.APP_NAME || 'api-server' }}
             TZ_VAL: ${{ secrets.TZ || 'Asia/Jakarta' }}
             
-            # Nilai opsional lainnya untuk di-fallback (Jika tidak didefinisikan di secret)
+            # Variabel yang membutuhkan Fallback Hardcode
             CONTEXT_TIMEOUT: ${{ secrets.CONTEXT_TIMEOUT || 30 }}
             JWT_ACCESS_TOKEN_EXPIRY_HOUR: ${{ secrets.JWT_ACCESS_TOKEN_EXPIRY_HOUR || 5 }}
             JWT_REFRESH_TOKEN_EXPIRY_HOUR: ${{ secrets.JWT_REFRESH_TOKEN_EXPIRY_HOUR || 168 }}
@@ -42,7 +85,7 @@ jobs:
             TYPESENSE_PORT: ${{ secrets.TYPESENSE_PORT || 8108 }}
 
           script: |
-            # 1. Gunakan variabel yang sudah dievaluasi (sekarang menjadi variabel shell sederhana)
+            # 1. Gunakan variabel yang sudah dievaluasi (shell sederhana)
             APP_PORT=$APP_PORT
             APP_NAME=$APP_NAME
             
@@ -69,17 +112,13 @@ jobs:
               -p ${APP_PORT}:${APP_PORT} \
               --network e-klinik \
               
-              # --- MAIN SERVER CONFIG ---
+              # --- INJEKSI ENV KE CONTAINER ---
               --env APP_MODE=prod \
               --env EXTERNAL_PORT=${APP_PORT} \
               --env CONTEXT_TIMEOUT=${CONTEXT_TIMEOUT} \
-              
-              # --- JWT CONFIG ---
               --env JWT_ACCESS_TOKEN_EXPIRY_HOUR=${JWT_ACCESS_TOKEN_EXPIRY_HOUR} \
               --env JWT_REFRESH_TOKEN_EXPIRY_HOUR=${JWT_REFRESH_TOKEN_EXPIRY_HOUR} \
               --env JWT_SECRET=${{ secrets.JWT_SECRET }} \
-              
-              # --- POSTGRESQL CONFIG ---
               --env PG_USERNAME=${{ secrets.PG_USERNAME }} \
               --env PG_PASSWORD=${{ secrets.PG_PASSWORD }} \
               --env PG_POOLMAX=${PG_POOLMAX} \
@@ -88,8 +127,6 @@ jobs:
               --env PG_NAME=${{ secrets.PG_NAME }} \
               --env PG_SSL=${PG_SSL} \
               --env PG_MIGRATION_URL=${{ secrets.PG_MIGRATION_URL }} \
-
-              # --- MINIO CONFIG ---
               --env MINIO_ENDPOINT=${{ secrets.MINIO_ENDPOINT }} \
               --env MINIO_ACCESS_KEY=${{ secrets.MINIO_ACCESS_KEY }} \
               --env MINIO_SECRET_KEY=${{ secrets.MINIO_SECRET_KEY }} \
@@ -97,28 +134,18 @@ jobs:
               --env MINIO_BUCKET2=${{ secrets.MINIO_BUCKET2 }} \
               --env MINIO_REGION=${{ secrets.MINIO_REGION }} \
               --env MINIO_SSL=${MINIO_SSL} \
-              
-              # --- LOGGER CONFIG ---
               --env LOG_LEVEL=${LOG_LEVEL} \
               --env LOGGER=${LOGGER} \
-              
-              # --- REDIS/KEYDB CONFIG ---
               --env REDIS_HOST=${{ secrets.REDIS_HOST }} \
               --env REDIS_PORT=${REDIS_PORT} \
               --env REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }} \
               --env REDIS_TIMEOUT=${REDIS_TIMEOUT} \
-              
-              # --- RABBITMQ CONFIG ---
               --env RABBITMQ_USER=${{ secrets.RABBITMQ_USER }} \
               --env RABBITMQ_PASSWORD=${{ secrets.RABBITMQ_PASSWORD }} \
               --env RABBITMQ_HOST=${{ secrets.RABBITMQ_HOST }} \
               --env RABBITMQ_PORT=${RABBITMQ_PORT} \
-              
-              # --- IMAGOR CONFIG ---
               --env IMAGOR_HOST=${{ secrets.IMAGOR_HOST }} \
               --env IMAGOR_PORT=${IMAGOR_PORT} \
-              
-              # --- TYPESENSE CONFIG ---
               --env TYPESENSE_HOST=${{ secrets.TYPESENSE_HOST }} \
               --env TYPESENSE_PORT=${TYPESENSE_PORT} \
               --env TYPESENSE_API_KEY=${{ secrets.TYPESENSE_API_KEY }} \
