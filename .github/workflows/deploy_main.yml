@@ -62,32 +62,13 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           
-          # Indentasi ENV di sini menggunakan 6 spasi
-          env:
-            APP_PORT: ${{ secrets.EXTERNAL_PORT || 7777 }}
-            APP_NAME: ${{ secrets.APP_NAME || 'api-server' }}
-            TZ_VAL: ${{ secrets.TZ || 'Asia/Jakarta' }}
-            
-            CONTEXT_TIMEOUT: ${{ secrets.CONTEXT_TIMEOUT || 30 }}
-            JWT_ACCESS_TOKEN_EXPIRY_HOUR: ${{ secrets.JWT_ACCESS_TOKEN_EXPIRY_HOUR || 5 }}
-            JWT_REFRESH_TOKEN_EXPIRY_HOUR: ${{ secrets.JWT_REFRESH_TOKEN_EXPIRY_HOUR || 168 }}
-            PG_POOLMAX: ${{ secrets.PG_POOLMAX || 10 }}
-            PG_PORT: ${{ secrets.PG_PORT || 5435 }}
-            PG_SSL: ${{ secrets.PG_SSL || false }}
-            MINIO_SSL: ${{ secrets.MINIO_SSL || true }}
-            LOG_LEVEL: ${{ secrets.LOG_LEVEL || 'debug' }}
-            LOGGER: ${{ secrets.LOGGER || 'zerolog' }}
-            REDIS_TIMEOUT: ${{ secrets.REDIS_TIMEOUT || 2 }}
-            REDIS_PORT: ${{ secrets.REDIS_PORT || 6380 }}
-            RABBITMQ_PORT: ${{ secrets.RABBITMQ_PORT || 5672 }}
-            IMAGOR_PORT: ${{ secrets.IMAGOR_PORT || 8000 }}
-            TYPESENSE_PORT: ${{ secrets.TYPESENSE_PORT || 8108 }}
+          # ❌ BLOK ENV DIHAPUS SEPENUHNYA
 
-          # Indentasi script: | menggunakan 6 spasi
           script: |
-            # Baris di dalam script: | di-indentasi 1 spasi lagi (total 7 spasi dari margin kiri)
-            APP_PORT=$APP_PORT
-            APP_NAME=$APP_NAME
+            # 1. Tentukan variabel dari Secrets
+            APP_PORT=${{ secrets.EXTERNAL_PORT }}
+            APP_NAME=${{ secrets.APP_NAME }}
+            TZ_VAL=${{ secrets.TZ }}
             
             echo "🚀 Running Go app in Podman..."
             cd ~/app
@@ -107,24 +88,25 @@ jobs:
             echo "--- VERIFIKASI IMAGE TERBARU ---"
             podman images | grep ${APP_NAME}
 
-            # 3. Run container
+            # 3. Run container with pure secrets
             podman run -d --name ${APP_NAME} \
               -p ${APP_PORT}:${APP_PORT} \
               --network e-klinik \
               
+              # --- INJEKSI ENV KE CONTAINER DENGAN PURE SECRET ---
               --env APP_MODE=prod \
               --env EXTERNAL_PORT=${APP_PORT} \
-              --env CONTEXT_TIMEOUT=${CONTEXT_TIMEOUT} \
-              --env JWT_ACCESS_TOKEN_EXPIRY_HOUR=${JWT_ACCESS_TOKEN_EXPIRY_HOUR} \
-              --env JWT_REFRESH_TOKEN_EXPIRY_HOUR=${JWT_REFRESH_TOKEN_EXPIRY_HOUR} \
+              --env CONTEXT_TIMEOUT=${{ secrets.CONTEXT_TIMEOUT }} \
+              --env JWT_ACCESS_TOKEN_EXPIRY_HOUR=${{ secrets.JWT_ACCESS_TOKEN_EXPIRY_HOUR }} \
+              --env JWT_REFRESH_TOKEN_EXPIRY_HOUR=${{ secrets.JWT_REFRESH_TOKEN_EXPIRY_HOUR }} \
               --env JWT_SECRET=${{ secrets.JWT_SECRET }} \
               --env PG_USERNAME=${{ secrets.PG_USERNAME }} \
               --env PG_PASSWORD=${{ secrets.PG_PASSWORD }} \
-              --env PG_POOLMAX=${PG_POOLMAX} \
-              --env PG_PORT=${PG_PORT} \
+              --env PG_POOLMAX=${{ secrets.PG_POOLMAX }} \
+              --env PG_PORT=${{ secrets.PG_PORT }} \
               --env PG_HOST=${{ secrets.PG_HOST }} \
               --env PG_NAME=${{ secrets.PG_NAME }} \
-              --env PG_SSL=${PG_SSL} \
+              --env PG_SSL=${{ secrets.PG_SSL }} \
               --env PG_MIGRATION_URL=${{ secrets.PG_MIGRATION_URL }} \
               --env MINIO_ENDPOINT=${{ secrets.MINIO_ENDPOINT }} \
               --env MINIO_ACCESS_KEY=${{ secrets.MINIO_ACCESS_KEY }} \
@@ -132,21 +114,21 @@ jobs:
               --env MINIO_BUCKET1=${{ secrets.MINIO_BUCKET1 }} \
               --env MINIO_BUCKET2=${{ secrets.MINIO_BUCKET2 }} \
               --env MINIO_REGION=${{ secrets.MINIO_REGION }} \
-              --env MINIO_SSL=${MINIO_SSL} \
-              --env LOG_LEVEL=${LOG_LEVEL} \
-              --env LOGGER=${LOGGER} \
+              --env MINIO_SSL=${{ secrets.MINIO_SSL }} \
+              --env LOG_LEVEL=${{ secrets.LOG_LEVEL }} \
+              --env LOGGER=${{ secrets.LOGGER }} \
               --env REDIS_HOST=${{ secrets.REDIS_HOST }} \
-              --env REDIS_PORT=${REDIS_PORT} \
+              --env REDIS_PORT=${{ secrets.REDIS_PORT }} \
               --env REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }} \
-              --env REDIS_TIMEOUT=${REDIS_TIMEOUT} \
+              --env REDIS_TIMEOUT=${{ secrets.REDIS_TIMEOUT }} \
               --env RABBITMQ_USER=${{ secrets.RABBITMQ_USER }} \
               --env RABBITMQ_PASSWORD=${{ secrets.RABBITMQ_PASSWORD }} \
               --env RABBITMQ_HOST=${{ secrets.RABBITMQ_HOST }} \
-              --env RABBITMQ_PORT=${RABBITMQ_PORT} \
+              --env RABBITMQ_PORT=${{ secrets.RABBITMQ_PORT }} \
               --env IMAGOR_HOST=${{ secrets.IMAGOR_HOST }} \
-              --env IMAGOR_PORT=${IMAGOR_PORT} \
+              --env IMAGOR_PORT=${{ secrets.IMAGOR_PORT }} \
               --env TYPESENSE_HOST=${{ secrets.TYPESENSE_HOST }} \
-              --env TYPESENSE_PORT=${TYPESENSE_PORT} \
+              --env TYPESENSE_PORT=${{ secrets.TYPESENSE_PORT }} \
               --env TYPESENSE_API_KEY=${{ secrets.TYPESENSE_API_KEY }} \
               --env MEILI_IMAGE_HOST=${{ secrets.MEILI_IMAGE_HOST }} \
 
