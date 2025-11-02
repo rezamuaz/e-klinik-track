@@ -96,7 +96,7 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }} # 👈 Perubahan: Langsung pakai Secret
           script: |
             # 1. Tentukan variabel port utama
-            APP_PORT=${{ secrets.EXTERNAL_PORT || env.DEFAULT_EXTERNAL_PORT }}
+            APP_PORT=${{ secrets.EXTERNAL_PORT}}
             APP_NAME=${{ secrets.APP_NAME || 'api-server' }}
 
             echo "🚀 Running Go app in Podman..."
